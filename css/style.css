@@ -7,3 +7,9 @@ body {
   display: flexbox;
   background-color: #FEAA00;
 }
+
+.top-section {
+  background-color: #FEAA00;
+  color: #014EC5;
+  text-align: center;
+}
