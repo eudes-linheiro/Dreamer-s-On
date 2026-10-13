@@ -5,7 +5,9 @@ body {
 
 .navbar {
   display: flex;
+  height: 10vh;
   background-color: #FEAA00;
+  align-items: flex-end;
 }
 
 .top-section {
@@ -23,4 +25,12 @@ body {
 
 .footer {
   text-align: center;
+}
+.footer a{
+  text-decoration: none;
+  color: #333333;
+}
+
+.brand {
+  align-self: flex-start;
 }
