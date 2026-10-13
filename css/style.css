@@ -4,12 +4,21 @@ body {
 }
 
 .navbar {
-  display: flexbox;
+  display: flex;
   background-color: #FEAA00;
 }
 
 .top-section {
   background-color: #FEAA00;
   color: #014EC5;
+  text-align: center;
+}
+
+.mid-section {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.footer {
   text-align: center;
 }
