@@ -5,7 +5,7 @@ body {
 
 .navbar {
   display: flex;
-  height: 10vh;
+  flex-wrap: wrap;
   background-color: #FEAA00;
   align-items: flex-end;
 }
@@ -19,8 +19,9 @@ body {
 .mid-section {
   display: flex;
   flex-wrap: wrap;
+  padding: 8%;
   justify-content: center;
-  gap: 10px;
+  gap: 20px;
 }
 
 .footer {
