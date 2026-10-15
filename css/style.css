@@ -5,9 +5,20 @@ body {
 
 .navbar {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   background-color: #FEAA00;
-  align-items: flex-end;
+  padding: 1 rem 2 rem;
+  align-items: center;
+}
+
+.navlinks a {
+  color: #014ec5;
+  text-decoration: none;
+  margin-right: 1.5 rem;
+}
+
+.logo a {
+  justify-self: flex-start;
 }
 
 .top-section {
@@ -30,8 +41,4 @@ body {
 .footer a{
   text-decoration: none;
   color: #333333;
-}
-
-.brand {
-  align-self: flex-start;
 }
