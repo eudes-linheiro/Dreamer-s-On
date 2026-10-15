@@ -1,61 +1,72 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Dreamer's On is a community that helps dreamers turn ideas into action through education, art, technology, and sports." />
     <title>Dreamer's On | A Community of Dreamers</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="Font Awesome /css/brands.min.css">
-    <link rel="stylesheet" href="Font Awesome /css/all.min.css">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="font-awesome/css/all.min.css" />
   </head>
   <body>
-    <nav class="navbar">
+    <header class="navbar">
       <div class="logo">
-        <a href="index.html"><img src="img asset/brand.png" alt="brand.png" style="width: 10vw;"></a>
+        <a href="index.html" aria-label="Dreamer's On home">
+          <img src="img-asset/brand.png" alt="Dreamer's On logo" />
+        </a>
       </div>
-      <div class="navlinks">
-        <a href="">About</a>
-        <a href="">Join Us</a>
-        <a href="">Contact</a>
+
+      <nav class="navlinks" aria-label="Main navigation">
+        <a href="#about">About</a>
+        <a href="#join">Join Us</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="top-section">
+        <img src="img-asset/brand.png" alt="Dreamer's On brand image" class="hero-logo" />
+        <h1>Every dream matters. You are not alone on this journey.</h1>
+        <p>Be a dreamer. Join the community.</p>
+        <a href="#join" class="btn-primary">Join Today</a>
+      </section>
+
+      <section class="mid-section" id="about">
+        <article class="feature-card">
+          <img src="img-asset/education.jpeg" alt="Education" />
+          <h2>Education</h2>
+          <p>Teaching and learning that turn ideas and dreams into reality.</p>
+        </article>
+
+        <article class="feature-card">
+          <img src="img-asset/art.jpeg" alt="Art" />
+          <h2>Art</h2>
+          <p>Explore the raw, true, and unfiltered expression of who we are.</p>
+        </article>
+
+        <article class="feature-card">
+          <img src="img-asset/technology2.jpeg" alt="Technology" />
+          <h2>Technology</h2>
+          <p>Use the power of technology to connect voices and shape shared spaces.</p>
+        </article>
+
+        <article class="feature-card">
+          <img src="img-asset/sports.jpeg" alt="Sports" />
+          <h2>Sports</h2>
+          <p>Bring the community together and create deeper, stronger bonds.</p>
+        </article>
+      </section>
+    </main>
+
+    <footer class="footer" id="contact">
+      <p>&copy; 2026 Dreamer's On. All rights reserved.</p>
+      <div class="social-links">
+        <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook"></i></a>
+        <a href="https://instagram.com/dreamers_onn" target="_blank" rel="noopener" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+        <a href="https://x.com/Dreamer_sonn" target="_blank" rel="noopener" aria-label="X"><i class="fa-brands fa-x-twitter"></i></a>
+        <a href="https://www.youtube.com/@dreamers_on_ent" target="_blank" rel="noopener" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
+        <a href="https://www.linkedin.com/company/dreamer’s-on" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
       </div>
-    </nav>
-    <hr style="border: 0.5px solid #cccccc; margin: 0; padding: 0;">
-    <div class="top-section">
-      <img src="img asset/brand.png" alt="logo.png" style="width: 20vw;">
-      <h3>Every Dream Matter, You Are Not Alone On This Journey</h3>
-      <p>Be A Dreamer, Join The Community.</p>
-      <button style="width: 10vw; background-color: #014ec5; margin: 2vh;">Join Today</button>
-    </div>
-    <div class="mid-section">
-      <div>
-        <img src="img asset/education .jpeg" alt="education.jpg" style="width: 40vw;">
-        <h3 style="color: #333333;">Education</h3>
-        <p style="color: #5c5c5c;">Teaching Or Learning That Helps Translate <br>And Shape Our Dreams Or Ideas Into <br>Reality </p>
-      </div>
-      <div>
-        <img src="img asset/art.jpeg" alt="art.jpg" style="width: 40vw;">
-        <h3 style="color: #333333;">Art</h3>
-        <p style="color: #5c5c5c;">Explore The True Unfiltered,Raw And <br>Untamed Manifestation Of Our True Self <br>Through The Arts</p>
-      </div>
-      <div>
-        <img src="img asset/technology2.jpeg" alt="technology.jpg" style="width: 40vw;">
-        <h3 style="color: #333333;">Technology</h3>
-        <p style="color: #5c5c5c;">Using The Tranformative Power Of <br>Technology, To Connect Our Voices, <br>Shape Our Shared Spaces</p>
-      </div>
-      <div>
-        <img src="img asset/sports.jpeg" alt="sports.jpg" style="width: 40vw;">
-        <h3 style="color: #333333;">Sports</h3>
-        <p style="color: #5c5c5c;">Bringing The Community Together <br>And Creating Deeper Bonds.</p>
-      </div>
-    </div>
-    <hr style=" border: 0.5px solid #cccccc; width: 90%;">
-    <div class="footer">
-      <p style="color: #333333; font-size: 1.5vw;">&copy; 2026 Dreamer's On. All rights reserved</p>
-      <a href=""><i class="fa-brands fa-facebook"></i></a>
-      <a href="https://instagram.com/dreamers_onn?exln=NXFzbWthc2poeDRo&utm_source=qr"><i class="fa-brands fa-instagram"></i></a>
-      <a href="https://x.com/Dreamer_sonn"><i class="fa-brands fa-x-twitter"></i></a>
-      <a href="https://www.youtube.com/@dreamers_on_ent?si=p8iMAQt2Er2ZiLe6"><i class="fa-brands fa-youtube"></i></a>
-      <a href="https://www.linkedin.com/company/dreamer’s-on"><i class="fa-brands fa-linkedin"></i></a>
-    </div>
+    </footer>
   </body>
 </html>
