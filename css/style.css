@@ -5,15 +5,16 @@ body {
 
 .navbar {
   display: flex;
-  justify-content: space-between;
   background-color: #FEAA00;
+  justify-content: space-between;
   padding: 1rem 2rem;
   align-items: center;
 }
 
 .navlinks a {
-  color: #014ec5;
+  color: #014EC5;
   text-decoration: none;
+  margin-right: 1.5rem;
 }
 
 .logo a {
