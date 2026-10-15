@@ -7,14 +7,14 @@ body {
   display: flex;
   justify-content: space-between;
   background-color: #FEAA00;
-  padding: 1 rem 2 rem;
+  padding: 1rem 2rem;
   align-items: center;
 }
 
 .navlinks a {
   color: #014ec5;
   text-decoration: none;
-  margin-right: 1.5 rem;
+  margin-right: 1.5rem;
 }
 
 .logo a {
