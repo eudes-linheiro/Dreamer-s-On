@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Login</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css_style.css" />
+  </head>
+  <body style="background: #feaa00;">
+    <form action="/submit-form-endpoint" method="POST">
+      <label for="username">Email / Phone no.</label>
+      <input type="text" id="username" name="username" placeholder="e.g., jsmith" required>
+
+      <label for="pwd">Password:</label>
+      <input type="password" id="pwd" name="password" required>
+
+      <button type="submit">Submit Form</button>
+      <a href="#forgot">Forgot password</a>
+      <a href="#">Create an account</a>
+    </form>
+  </body>
+</html>
