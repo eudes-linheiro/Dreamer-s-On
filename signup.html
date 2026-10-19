@@ -1,27 +1,48 @@
-<!doctype html>
-<html>
-  <head>
-    <title>Sign Up</title>
-    <meta charset="utf-8">
-    <link rel="stylesheet" href="css_style.css" />
-  </head>
-  <body style="background: #feaa00;">
-    <form action="/submit-form-endpoint" method="POST">
-      <label for="first-name">First name</label>
-      <input type="text" id="first-name" name="first-name" placeholder="e.g., John" required>
-      <label for="last-name">Last name</label>
-      <input type="text" id="last-name" name="last-name" placeholder="e.g., Doe" required>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create an account</title>
+  <link rel="stylesheet" href="css/form.css">
+  <link rel="preconnect" href="https://googleapis.com">
+  <link rel="preconnect" href="https://gstatic.com" crossorigin>
+  <link href="https://googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
 
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" placeholder="johndoe@example.com" required>
+  <main class="login-container">
+    <div class="login-card">
+      <h1 class="title">Create your account</h1>
+      <p class="subtitle">Please enter your details</p>
 
-      <label for="pwd">Password</label>
-      <input type="password" id="pwd" name="password" required>
-      <label for="pwd">Confirm Password</label>
-      <input type="password" id="pwd" name="confirmation" required>
+      <form>
+        <div class="input-group">
+          <input type="text" placeholder="First name" required>
+        </div>
 
-      <button type="submit">Sign Up</button>
-      <a href="#">Already have an account</a>
-    </form>
-  </body>
+        <div class="input-group">
+          <input type="text" placeholder="Last name" required>
+        </div>
+        <div class="input-group">
+          <input type="email" placeholder="Email adress" required>
+        </div>
+        <div class="input-group">
+          <input type="password" placeholder="Password" required>
+        </div>
+        <div class="input-group">
+          <input type="password" placeholder="Confirm password" required>
+        </div>
+
+        <div class="form-options">
+
+        </div>
+        <button type="submit" class="btn-primary">Sign up</button>
+      </form>
+      <p class="signup-footer">
+        Already have an account? <a href="login.html">Login</a>
+      </p>
+    </div>
+  </main>
+</body>
 </html>
