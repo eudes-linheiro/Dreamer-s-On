@@ -100,6 +100,10 @@ body {
   color: #333;
 }
 
+.feature-card h1, h3 {
+  padding: 4%;
+}
+
 @media (max-width: 768px) {
   .navbar, .footer {
     flex-direction: column;
