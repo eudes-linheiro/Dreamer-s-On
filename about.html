@@ -1,15 +1,46 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <title>About Us</title>
-    <meta charset="utf-8">
-    <link rel="stylesheet" href="css_style.css" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Dreamer's On is a community that helps dreamers turn ideas into action through education, art, technology, and sports." />
+    <title>About us</title>
+    <link rel="stylesheet" href="css/css_style.css" />
+    <link rel="stylesheet" href="font-awesome/css/all.min.css" />
   </head>
-  <body style="background: #feaa00;">
-    <form action="/submit-form-endpoint" method="POST">
-      <label for="username">Email</label>
-      <input type="email" id="email" name="email" placeholder="write your email" required>
-      <button type="submit">Submit</button>
-    </form>
+  <body>
+    <header class="navbar">
+      <div class="logo">
+        <a href="index.html" aria-label="Dreamer's On home">
+          <img src="img-asset/brand.png" alt="Dreamer's On logo" />
+        </a>
+      </div>
+
+      <nav class="navlinks" aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="login.html">Login</a>
+        <a href="contact.html">Contact</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="mid-section" id="about">
+        <article class="feature-card">
+          <h1 style="font-size: 3rem;"> About us </h1>
+          <h3 style="color: #333;"> We get it because we’ve been there. The long nights, the self-doubt, the stinging disappointments, and the frustration of having a big vision that no one else seems to understand—it’s all part of the journey. But entrepreneurship shouldn’t mean going at it alone. We are here to stand by your side, clear the hurdles, and give you the tools, strategy, and support you need to turn your raw ideas into a thriving, profitable business. Let’s build your dream together. </h3>
+        </article>
+      </section>
+    </main>
+
+    <footer class="footer" id="contact">
+      <p>&copy; 2026 Dreamer's On. All rights reserved.</p>
+      <div class="social-links">
+        <a href="https://www.facebook.com/profile.php?id=61595445001055" target="_blank" rel="noopener" aria-label="Facebook"><i class="fa-brands fa-facebook"></i></a>
+        <a href="https://instagram.com/dreamers_onn" target="_blank" rel="noopener" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+        <a href="https://x.com/Dreamer_sonn" target="_blank" rel="noopener" aria-label="X"><i class="fa-brands fa-x-twitter"></i></a>
+        <a href="https://www.youtube.com/@dreamers_on_ent" target="_blank" rel="noopener" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
+        <a href="https://www.linkedin.com/company/dreamer’s-on" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+      </div>
+    </footer>
   </body>
 </html>
