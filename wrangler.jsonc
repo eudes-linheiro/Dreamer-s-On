@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "dreamers-on-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "add6a2d5-a472-4d77-ba38-c7054337d8c2",
       "migrations_dir": "migrations"
     }
   ],
