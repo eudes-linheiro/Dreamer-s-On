@@ -3,10 +3,15 @@ body {
   font-family: Arial, sans-serif;
 }
 
+.home-page a {
+  text-decoration: none;
+}
+
 .navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   padding: 1rem 5%;
   background: #FEAA00;
 }
@@ -17,10 +22,15 @@ body {
 
 .navlinks {
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem clamp(8px, 1.4vw, 18px);
 }
 
 .navlinks a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
   text-decoration: none;
   color: #013ca8;
   font-weight: 600;

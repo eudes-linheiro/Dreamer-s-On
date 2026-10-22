@@ -16,6 +16,32 @@ body {
   padding: 20px;
 }
 
+.form-nav {
+  position: absolute;
+  top: 16px;
+  right: 5%;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 14px;
+}
+
+.form-nav a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  color: #013ca8;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.form-nav a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 .login-container {
   width: 100%;
   max-width: 520px;
@@ -72,6 +98,17 @@ body {
   align-items: center;
   margin-bottom: 30px;
   font-size: 14px;
+}
+
+.form-message {
+  color: #b91c1c;
+  font-size: 14px;
+  min-height: 1.25em;
+  margin: -18px 0 14px;
+}
+
+.form-message[data-state="success"] {
+  color: #17613c;
 }
 
 .forgot-link {
@@ -150,6 +187,16 @@ textarea:focus {
 @media (max-width: 640px) {
   body {
     padding-top: 100px;
+  }
+  .form-nav {
+    top: 16px;
+    right: 16px;
+    left: 16px;
+    justify-content: center;
+    gap: 4px 12px;
+  }
+  body {
+    padding-top: 180px;
   }
   .brand-container {
     top: 20px;

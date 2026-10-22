@@ -1,0 +1,301 @@
+.account-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f8ff;
+  color: #17233c;
+}
+
+.account-page .navbar {
+  flex: 0 0 auto;
+  border-bottom: 1px solid rgba(1, 60, 168, 0.12);
+}
+
+.account-main {
+  width: min(100% - 40px, 900px);
+  margin: 0 auto;
+  padding: 42px 0 72px;
+  flex: 1 0 auto;
+}
+
+.account-back {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 22px;
+  color: #014ec5;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.account-back:hover {
+  text-decoration: underline;
+}
+
+.account-heading {
+  margin-bottom: 28px;
+}
+
+.account-eyebrow {
+  margin: 0 0 8px;
+  color: #014ec5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-heading h1 {
+  margin: 0 0 10px;
+  color: #102c61;
+  font-size: 38px;
+  line-height: 1.15;
+}
+
+.account-heading > p:last-child {
+  margin: 0;
+  color: #53627b;
+  font-size: 16px;
+}
+
+.account-loading {
+  min-height: 24px;
+  color: #53627b;
+}
+
+.account-panels[hidden] {
+  display: none;
+}
+
+.account-panel {
+  margin-bottom: 20px;
+  padding: 30px 34px 26px;
+  border: 1px solid #dce4f2;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(16, 44, 97, 0.06);
+}
+
+.account-panel-heading {
+  margin-bottom: 24px;
+}
+
+.account-panel-heading h2 {
+  margin: 0 0 7px;
+  color: #102c61;
+  font-size: 21px;
+}
+
+.account-panel-heading p {
+  margin: 0;
+  color: #68768c;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.account-course-status {
+  min-height: 20px;
+  margin: 0 0 12px;
+  color: #53627b;
+  font-size: 14px;
+}
+
+.account-course-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-course-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-top: 1px solid #e6ebf3;
+}
+
+.account-course-item h3 {
+  margin: 0 0 5px;
+  color: #102c61;
+  font-size: 16px;
+}
+
+.account-course-item p {
+  margin: 0;
+  color: #68768c;
+  font-size: 13px;
+}
+
+.account-course-remove {
+  min-height: 40px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid #cbd6e6;
+  border-radius: 4px;
+  background: #fff;
+  color: #33445f;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.account-course-remove:hover {
+  border-color: #014ec5;
+  color: #014ec5;
+}
+
+.account-course-remove:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.account-course-link {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: #014ec5;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.account-course-link:hover {
+  text-decoration: underline;
+}
+
+.account-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+}
+
+.account-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: #273750;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.account-field-wide {
+  grid-column: 1 / -1;
+}
+
+.account-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #cbd6e6;
+  border-radius: 4px;
+  background: #fff;
+  color: #17233c;
+  font: inherit;
+  font-size: 15px;
+}
+
+.account-field input:focus {
+  border-color: #014ec5;
+  outline: 3px solid rgba(1, 78, 197, 0.16);
+}
+
+.account-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.account-message {
+  min-height: 20px;
+  margin: 0;
+  color: #53627b;
+  font-size: 14px;
+}
+
+.account-message[data-state="error"] {
+  color: #b91c1c;
+}
+
+.account-message[data-state="success"] {
+  color: #17613c;
+}
+
+.account-submit {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 4px;
+  background: #014ec5;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-submit:hover {
+  background: #013ca8;
+}
+
+.account-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.account-page .footer {
+  flex: 0 0 auto;
+  background: #fff;
+}
+
+.account-page .footer a {
+  color: #014ec5;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .account-main {
+    width: min(100% - 32px, 900px);
+    padding: 30px 0 48px;
+  }
+
+  .account-heading h1 {
+    font-size: 32px;
+  }
+
+  .account-panel {
+    padding: 24px 20px 20px;
+  }
+
+  .account-fields {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .account-field-wide {
+    grid-column: auto;
+  }
+
+  .account-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .account-submit {
+    width: 100%;
+  }
+
+  .account-course-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
