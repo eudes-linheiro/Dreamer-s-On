@@ -7,6 +7,7 @@ const paymentInstructions = document.querySelector('#course-payment-instructions
 const paymentDialogMessage = document.querySelector('#course-payment-dialog-message');
 let activeButton = null;
 let paymentDetails;
+let paymentDetailsPromise;
 
 function setEnrollmentState(button, enrolled, request) {
   button.dataset.enrolled = String(enrolled);
@@ -67,66 +68,84 @@ async function loadEnrollments() {
   }
 }
 
+async function fetchPaymentDetails() {
+  if (paymentDetails) {
+    return paymentDetails;
+  }
+  if (!paymentDetailsPromise) {
+    paymentDetailsPromise = fetch('/api/courses/payment-details', { credentials: 'same-origin' })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Course payment details are unavailable. Please contact support.');
+        }
+        paymentDetails = await response.json();
+        return paymentDetails;
+      });
+  }
+  return paymentDetailsPromise;
+}
+
 async function openPaymentDialog(button) {
   activeButton = button;
   paymentDialogMessage.textContent = '';
   paymentForm.reset();
-  if (!paymentDetails) {
-    const response = await fetch('/api/courses/payment-details', { credentials: 'same-origin' });
-    if (!response.ok) {
-      throw new Error('Course payment details are unavailable. Please contact support.');
-    }
-    paymentDetails = await response.json();
-  }
-  if (!paymentDetails.instructions.trim()) {
+
+  const details = await fetchPaymentDetails();
+  if (!details.instructions.trim()) {
     throw new Error('Course payment instructions are not configured. Please contact support.');
   }
-  paymentInstructions.textContent = paymentDetails.instructions;
+
+  paymentInstructions.textContent = details.instructions;
   paymentDialog.showModal();
   paymentForm.elements.namedItem('transactionReference').focus();
 }
 
-enrollButtons.forEach((button) => {
-  button.addEventListener('click', async () => {
-    if (button.dataset.authRequired === 'true') {
-      window.location.assign(`/login.html?returnTo=${returnToCourses}`);
-      return;
-    }
-    if (button.disabled) return;
-    if (button.dataset.enrolled === 'true') {
-      button.disabled = true;
-      setCourseMessage(button, 'Updating your course list...');
-      try {
-        const response = await fetch(`/api/courses/${button.dataset.courseId}/enrollment`, {
-          method: 'DELETE',
-          credentials: 'same-origin',
-        });
-        if (response.status === 401) {
-          window.location.assign(`/login.html?returnTo=${returnToCourses}`);
-          return;
-        }
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Could not update your enrollment.');
-        await loadEnrollments();
-        setCourseMessage(button, 'Course removed from your account.', 'success');
-      } catch (error) {
-        setCourseMessage(button, error.message || 'Could not update your enrollment. Try again.', 'error');
-      } finally {
-        button.disabled = false;
-      }
-      return;
-    }
+const courseButtonHandler = async (event) => {
+  const button = event.target.closest('[data-course-id]');
+  if (!button) {
+    return;
+  }
 
+  if (button.dataset.authRequired === 'true') {
+    window.location.assign(`/login.html?returnTo=${returnToCourses}`);
+    return;
+  }
+  if (button.disabled) return;
+  if (button.dataset.enrolled === 'true') {
     button.disabled = true;
+    setCourseMessage(button, 'Updating your course list...');
     try {
-      await openPaymentDialog(button);
+      const response = await fetch(`/api/courses/${button.dataset.courseId}/enrollment`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (response.status === 401) {
+        window.location.assign(`/login.html?returnTo=${returnToCourses}`);
+        return;
+      }
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not update your enrollment.');
+      await loadEnrollments();
+      setCourseMessage(button, 'Course removed from your account.', 'success');
     } catch (error) {
-      setCourseMessage(button, error.message || 'Could not load payment instructions.', 'error');
+      setCourseMessage(button, error.message || 'Could not update your enrollment. Try again.', 'error');
     } finally {
       button.disabled = false;
     }
-  });
-});
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    await openPaymentDialog(button);
+  } catch (error) {
+    setCourseMessage(button, error.message || 'Could not load payment instructions.', 'error');
+  } finally {
+    button.disabled = false;
+  }
+};
+
+document.addEventListener('click', courseButtonHandler);
 
 document.querySelector('[data-payment-cancel]').addEventListener('click', () => paymentDialog.close());
 
