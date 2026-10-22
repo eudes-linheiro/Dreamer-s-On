@@ -1,8 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "dreamer-s-on",
+  "name": "dreamers-on",
   "main": "src/index.ts",
-  "compatibility_date": "2026-10-19",
+  "compatibility_date": "2026-10-22",
+  "nodejs_compat": true,
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
   "d1_databases": [
     {
       "binding": "DB",
