@@ -18,6 +18,8 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY_SIZE = 16 * 1024;
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_PROFILE_PHOTO_BODY_SIZE = Math.ceil(MAX_PROFILE_PHOTO_BYTES * 4 / 3) + 512;
+const STATIC_CACHE_TTL_MS = 60 * 60 * 1000;
+const STATIC_CACHE = new Map();
 const PUBLIC_PAGES = new Set([
   'index.html',
   'about.html',
@@ -72,6 +74,10 @@ function sendJson(response, status, body, headers = {}) {
     ...headers,
   });
   response.end(JSON.stringify(body));
+}
+
+function purgeExpiredSessions(database) {
+  database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
 }
 
 async function readJson(request, maxBytes = MAX_BODY_SIZE) {
@@ -215,6 +221,36 @@ function hashSession(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function getStaticCacheControl(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.html') {
+    return 'no-cache';
+  }
+  if (['.js', '.css', '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.eot'].includes(ext)) {
+    return 'public, max-age=31536000, immutable';
+  }
+  return 'public, max-age=86400';
+}
+
+function getFileEtag(content) {
+  return `"${createHash('sha1').update(content).digest('hex')}"`;
+}
+
+async function readCachedStaticFile(filePath) {
+  const cached = STATIC_CACHE.get(filePath);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.content;
+  }
+
+  const content = await fs.promises.readFile(filePath);
+  STATIC_CACHE.set(filePath, {
+    content,
+    expiresAt: now + STATIC_CACHE_TTL_MS,
+  });
+  return content;
+}
+
 function isPublicFile(relativePath) {
   if (PUBLIC_PAGES.has(relativePath)) {
     return true;
@@ -303,7 +339,16 @@ function createAuthServer({
     database.exec('ALTER TABLE users ADD COLUMN photo_mime TEXT');
   }
 
+  purgeExpiredSessions(database);
+
   const rateLimits = new Map();
+  const sessionCleanupInterval = setInterval(() => {
+    try {
+      purgeExpiredSessions(database);
+    } catch (error) {
+      console.error('Session cleanup failed.', error);
+    }
+  }, 60_000);
 
   function allowedByRateLimit(request, route, maximum) {
     const now = Date.now();
@@ -342,7 +387,6 @@ function createAuthServer({
       return null;
     }
     const tokenHash = hashSession(token);
-    database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
     return database.prepare(`
       SELECT users.id, users.first_name, users.last_name, users.identifier
       FROM sessions JOIN users ON users.id = sessions.user_id
@@ -951,10 +995,22 @@ function createAuthServer({
         return;
       }
 
-      const content = await fs.promises.readFile(filePath);
+      const content = await readCachedStaticFile(filePath);
+      const etag = getFileEtag(content);
+      const requestEtag = request.headers['if-none-match'];
+      if (request.method === 'GET' && requestEtag === etag) {
+        response.writeHead(304, {
+          'Cache-Control': getStaticCacheControl(filePath),
+          ETag: etag,
+        });
+        response.end();
+        return;
+      }
+
       response.writeHead(200, {
-        'Cache-Control': 'no-cache',
+        'Cache-Control': getStaticCacheControl(filePath),
         'Content-Type': CONTENT_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+        ETag: etag,
       });
       response.end(request.method === 'HEAD' ? undefined : content);
     } catch (error) {
@@ -973,6 +1029,7 @@ function createAuthServer({
     void handleRequest(request, response);
   });
   server.database = database;
+  server.on('close', () => clearInterval(sessionCleanupInterval));
   return server;
 }
 
