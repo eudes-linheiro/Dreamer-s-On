@@ -8,7 +8,7 @@ const {
   scrypt,
   timingSafeEqual,
 } = require('node:crypto');
-const { DatabaseSync } = require('node:sqlite');
+const { Database } = require('node:sqlite');
 
 const scryptAsync = promisify(scrypt);
 const passwordRecovery = import('./functions/_shared/password-recovery.mjs');
@@ -44,6 +44,7 @@ const COURSES = [
   { id: 'music-theory', title: 'Music theory', category: 'Music' },
   { id: 'music-production', title: 'Music production', category: 'Music' },
 ];
+const COURSE_BY_ID = new Map(COURSES.map((course) => [course.id, course]));
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.eot': 'application/vnd.ms-fontobject',
@@ -76,8 +77,8 @@ function sendJson(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 
-function purgeExpiredSessions(database) {
-  database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
+async function purgeExpiredSessions(database) {
+  await database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
 }
 
 async function readJson(request, maxBytes = MAX_BODY_SIZE) {
@@ -258,15 +259,15 @@ function isPublicFile(relativePath) {
   return PUBLIC_DIRECTORIES.some((directory) => relativePath.startsWith(`${directory}/`));
 }
 
-function createAuthServer({
+async function createAuthServer({
   databasePath = process.env.AUTH_DB_PATH || path.join(ROOT, 'data', 'auth.sqlite'),
   secureCookies = process.env.NODE_ENV === 'production',
   environment = process.env,
   sendRecoveryCode,
 } = {}) {
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-  const database = new DatabaseSync(databasePath);
-  database.exec(`
+  const database = new Database(databasePath);
+  await database.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS users (
@@ -327,28 +328,23 @@ function createAuthServer({
     CREATE INDEX IF NOT EXISTS course_payment_requests_status_created
       ON course_payment_requests (status, created_at);
   `);
+
   const insertCourse = database.prepare(
     'INSERT INTO courses (id, title, category) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING',
   );
-  COURSES.forEach((course) => insertCourse.run(course.id, course.title, course.category));
-  const userColumns = new Set(database.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
+  for (const course of COURSES) {
+    await insertCourse.run(course.id, course.title, course.category);
+  }
+
+  const userColumns = new Set((await database.prepare('PRAGMA table_info(users)').all()).map((column) => column.name));
   if (!userColumns.has('photo_data')) {
-    database.exec('ALTER TABLE users ADD COLUMN photo_data BLOB');
+    await database.exec('ALTER TABLE users ADD COLUMN photo_data BLOB');
   }
   if (!userColumns.has('photo_mime')) {
-    database.exec('ALTER TABLE users ADD COLUMN photo_mime TEXT');
+    await database.exec('ALTER TABLE users ADD COLUMN photo_mime TEXT');
   }
 
-  purgeExpiredSessions(database);
-
   const rateLimits = new Map();
-  const sessionCleanupInterval = setInterval(() => {
-    try {
-      purgeExpiredSessions(database);
-    } catch (error) {
-      console.error('Session cleanup failed.', error);
-    }
-  }, 60_000);
 
   function allowedByRateLimit(request, route, maximum) {
     const now = Date.now();
@@ -362,10 +358,10 @@ function createAuthServer({
     return current.count <= maximum;
   }
 
-  function createSession(userId) {
+  async function createSession(userId) {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = Date.now() + SESSION_TTL_MS;
-    database.prepare(
+    await database.prepare(
       'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
     ).run(hashSession(token), userId, expiresAt);
     return token;
@@ -375,7 +371,7 @@ function createAuthServer({
     return `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secureCookies ? '; Secure' : ''}`;
   }
 
-  function findUserForSession(request) {
+  async function findUserForSession(request) {
     const cookieHeader = request.headers.cookie || '';
     const cookie = cookieHeader.split(';').map((part) => part.trim())
       .find((part) => part.startsWith(`${SESSION_COOKIE}=`));
@@ -445,7 +441,7 @@ function createAuthServer({
     }
 
     if (isAdminCoursePayments || adminCoursePaymentRoute) {
-      const user = findUserForSession(request);
+      const user = await findUserForSession(request);
       if (!user) {
         sendJson(response, 401, { error: 'Not signed in.' });
         return;
@@ -460,7 +456,7 @@ function createAuthServer({
         return;
       }
       if (isAdminCoursePayments) {
-        const requests = database.prepare(`
+        const requests = await database.prepare(`
           SELECT requests.id, requests.transaction_reference AS transactionReference,
             requests.created_at AS createdAt, users.first_name AS firstName,
             users.last_name AS lastName, users.identifier, courses.title AS courseTitle
@@ -487,30 +483,34 @@ function createAuthServer({
         throw httpError(400, 'Choose approve or reject.');
       }
 
-      database.exec('BEGIN IMMEDIATE');
       try {
-        const payment = database.prepare(
+        await database.exec('BEGIN IMMEDIATE');
+        const payment = await database.prepare(
           "SELECT user_id, course_id FROM course_payment_requests WHERE id = ? AND status = 'pending'",
         ).get(requestId);
         if (!payment) {
-          const exists = database.prepare('SELECT 1 FROM course_payment_requests WHERE id = ?').get(requestId);
+          const exists = await database.prepare('SELECT 1 FROM course_payment_requests WHERE id = ?').get(requestId);
           throw httpError(exists ? 409 : 404, exists ? 'This payment request has already been reviewed.' : 'Payment request not found.');
         }
-        database.prepare(`
+        await database.prepare(`
           UPDATE course_payment_requests
           SET status = ?, reviewed_at = ?, reviewed_by = ?
           WHERE id = ? AND status = 'pending'
         `).run(input.action === 'approve' ? 'approved' : 'rejected', Date.now(), user.id, requestId);
         if (input.action === 'approve') {
-          database.prepare(`
+          await database.prepare(`
             INSERT INTO course_enrollments (user_id, course_id, enrolled_at)
             VALUES (?, ?, ?)
             ON CONFLICT (user_id, course_id) DO NOTHING
           `).run(payment.user_id, payment.course_id, Date.now());
         }
-        database.exec('COMMIT');
+        await database.exec('COMMIT');
       } catch (error) {
-        if (database.isTransaction) database.exec('ROLLBACK');
+        try {
+          await database.exec('ROLLBACK');
+        } catch {
+          // no-op
+        }
         throw error;
       }
       sendJson(response, 200, { status: input.action === 'approve' ? 'approved' : 'rejected' });
@@ -518,20 +518,20 @@ function createAuthServer({
     }
 
     if (isCurrentUser) {
-      const user = findUserForSession(request);
+      const user = await findUserForSession(request);
       sendJson(response, user ? 200 : 401, user ? { user } : { error: 'Not signed in.' });
       return;
     }
 
     if (isProfilePhoto) {
-      const user = findUserForSession(request);
+      const user = await findUserForSession(request);
       if (!user) {
         sendJson(response, 401, { error: 'Not signed in.' });
         return;
       }
 
       if (request.method === 'GET') {
-        const photo = database.prepare(
+        const photo = await database.prepare(
           'SELECT photo_data, photo_mime FROM users WHERE id = ?',
         ).get(user.id);
         if (!photo || !photo.photo_data) {
@@ -552,7 +552,7 @@ function createAuthServer({
         return;
       }
       if (request.method === 'DELETE') {
-        database.prepare('UPDATE users SET photo_data = NULL, photo_mime = NULL WHERE id = ?').run(user.id);
+        await database.prepare('UPDATE users SET photo_data = NULL, photo_mime = NULL WHERE id = ?').run(user.id);
         sendJson(response, 200, { ok: true });
         return;
       }
@@ -562,7 +562,7 @@ function createAuthServer({
         throw httpError(400, 'Request body must be a JSON object.');
       }
       const photo = decodeProfilePhoto(input.dataUrl);
-      database.prepare('UPDATE users SET photo_data = ?, photo_mime = ? WHERE id = ?')
+      await database.prepare('UPDATE users SET photo_data = ?, photo_mime = ? WHERE id = ?')
         .run(photo.data, photo.mimeType, user.id);
       sendJson(response, 200, { ok: true });
       return;
@@ -598,20 +598,20 @@ function createAuthServer({
     }
 
     if (isCourseEnrollments || enrollmentRoute) {
-      const user = findUserForSession(request);
+      const user = await findUserForSession(request);
       if (!user) {
         sendJson(response, 401, { error: 'Not signed in.' });
         return;
       }
 
       if (isCourseEnrollments) {
-        const enrollments = database.prepare(`
+        const enrollments = await database.prepare(`
           SELECT course_id, enrolled_at AS enrolledAt
           FROM course_enrollments
           WHERE user_id = ?
           ORDER BY enrolled_at DESC
         `).all(user.id);
-        const paymentRequests = database.prepare(`
+        const paymentRequests = await database.prepare(`
           SELECT requests.id, requests.course_id AS courseId, courses.title AS courseTitle,
             requests.status, requests.created_at AS createdAt
           FROM course_payment_requests AS requests
@@ -626,7 +626,7 @@ function createAuthServer({
         `).all(user.id);
         sendJson(response, 200, {
           courses: enrollments.map((enrollment) => ({
-            ...COURSES.find((course) => course.id === enrollment.course_id),
+            ...COURSE_BY_ID.get(enrollment.course_id),
             enrolledAt: enrollment.enrolledAt,
           })),
           paymentRequests,
@@ -635,7 +635,7 @@ function createAuthServer({
       }
 
       const courseId = enrollmentRoute[1];
-      if (!COURSES.some((course) => course.id === courseId)) {
+      if (!COURSE_BY_ID.has(courseId)) {
         sendJson(response, 404, { error: 'Course not found.' });
         return;
       }
@@ -654,12 +654,12 @@ function createAuthServer({
         if (transactionReference.length < 3 || transactionReference.length > 100) {
           throw httpError(400, 'Enter a payment reference between 3 and 100 characters.');
         }
-        if (database.prepare('SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?')
+        if (await database.prepare('SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?')
           .get(user.id, courseId)) {
           sendJson(response, 200, { enrolled: true, alreadyEnrolled: true });
           return;
         }
-        database.prepare(`
+        await database.prepare(`
           INSERT INTO course_payment_requests (user_id, course_id, transaction_reference, status, created_at)
           SELECT ?, ?, ?, 'pending', ?
           WHERE NOT EXISTS (
@@ -667,12 +667,12 @@ function createAuthServer({
           )
           ON CONFLICT DO NOTHING
         `).run(user.id, courseId, transactionReference, Date.now(), user.id, courseId);
-        if (database.prepare('SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?')
+        if (await database.prepare('SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?')
           .get(user.id, courseId)) {
           sendJson(response, 200, { enrolled: true, alreadyEnrolled: true });
           return;
         }
-        const paymentRequest = database.prepare(`
+        const paymentRequest = await database.prepare(`
           SELECT id FROM course_payment_requests
           WHERE user_id = ? AND course_id = ? AND status = 'pending'
         `).get(user.id, courseId);
@@ -680,7 +680,7 @@ function createAuthServer({
         return;
       }
 
-      const deletion = database.prepare(
+      const deletion = await database.prepare(
         'DELETE FROM course_enrollments WHERE user_id = ? AND course_id = ?',
       ).run(user.id, courseId);
       sendJson(response, 200, { enrolled: false, removed: Number(deletion.changes) > 0 });
@@ -688,14 +688,14 @@ function createAuthServer({
     }
 
     if (isLogout) {
-      const user = findUserForSession(request);
+      const user = await findUserForSession(request);
       const cookieHeader = request.headers.cookie || '';
       const cookie = cookieHeader.split(';').map((part) => part.trim())
         .find((part) => part.startsWith(`${SESSION_COOKIE}=`));
       if (cookie) {
         const token = cookie.slice(SESSION_COOKIE.length + 1);
         if (/^[\w-]{40,50}$/.test(token)) {
-          database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashSession(token));
+          await database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashSession(token));
         }
       }
       sendJson(response, 200, { ok: true }, {
@@ -719,7 +719,7 @@ function createAuthServer({
       if (message.length < 10 || message.length > 5000) {
         throw httpError(400, 'Your message must be between 10 and 5000 characters.');
       }
-      database.prepare(`
+      await database.prepare(`
         INSERT INTO contact_messages (name, email, message, created_at)
         VALUES (?, ?, ?, ?)
       `).run(name, email, message, Date.now());
@@ -740,12 +740,12 @@ function createAuthServer({
         throw httpError(503, 'Password recovery is not configured for this contact method. Please contact support.');
       }
 
-      const user = database.prepare('SELECT id FROM users WHERE identifier = ?').get(identifier);
+      const user = await database.prepare('SELECT id FROM users WHERE identifier = ?').get(identifier);
       if (user) {
         const now = Date.now();
         const code = createRecoveryCode();
         const codeHash = await hashRecoveryCode(environment.PASSWORD_RESET_SECRET, user.id, code);
-        const issued = database.prepare(`
+        const issued = await database.prepare(`
           INSERT INTO password_reset_codes (user_id, code_hash, expires_at, attempts, requested_at)
           VALUES (?, ?, ?, 0, ?)
           ON CONFLICT(user_id) DO UPDATE SET
@@ -764,7 +764,7 @@ function createAuthServer({
               await deliverRecoveryCode(channel, identifier, code, environment);
             }
           } catch (error) {
-            database.prepare('DELETE FROM password_reset_codes WHERE user_id = ? AND code_hash = ?')
+            await database.prepare('DELETE FROM password_reset_codes WHERE user_id = ? AND code_hash = ?')
               .run(user.id, codeHash);
             console.error('Password reset code delivery failed.', error);
             throw httpError(502, 'We could not send a verification code. Please try again later.');
@@ -791,23 +791,23 @@ function createAuthServer({
         throw httpError(400, 'Enter the 6-digit verification code.');
       }
       validatePassword(input.newPassword);
-      const user = database.prepare('SELECT id FROM users WHERE identifier = ?').get(identifier);
+      const user = await database.prepare('SELECT id FROM users WHERE identifier = ?').get(identifier);
       if (!user) throw httpError(400, 'The verification code is invalid or expired.');
 
-      const record = database.prepare(`
+      const record = await database.prepare(`
         SELECT code_hash, expires_at, attempts
         FROM password_reset_codes WHERE user_id = ?
       `).get(user.id);
       const now = Date.now();
       if (!record || record.expires_at <= now || record.attempts >= 5) {
-        database.prepare('DELETE FROM password_reset_codes WHERE user_id = ?').run(user.id);
+        await database.prepare('DELETE FROM password_reset_codes WHERE user_id = ?').run(user.id);
         throw httpError(400, 'The verification code is invalid or expired.');
       }
 
       const { constantTimeEqual, hashRecoveryCode } = await passwordRecovery;
       const submittedHash = await hashRecoveryCode(environment.PASSWORD_RESET_SECRET, user.id, input.code);
       if (!constantTimeEqual(submittedHash, record.code_hash)) {
-        database.prepare(`
+        await database.prepare(`
           UPDATE password_reset_codes SET attempts = attempts + 1
           WHERE user_id = ? AND attempts < 5
         `).run(user.id);
@@ -815,21 +815,25 @@ function createAuthServer({
       }
 
       const credentials = await hashPassword(input.newPassword);
-      database.exec('BEGIN IMMEDIATE');
       try {
-        const consumed = database.prepare(`
+        await database.exec('BEGIN IMMEDIATE');
+        const consumed = await database.prepare(`
           DELETE FROM password_reset_codes
           WHERE user_id = ? AND code_hash = ? AND expires_at > ? AND attempts < 5
         `).run(user.id, record.code_hash, now);
         if (Number(consumed.changes) !== 1) {
           throw httpError(400, 'The verification code is invalid or expired.');
         }
-        database.prepare('UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?')
+        await database.prepare('UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?')
           .run(credentials.salt, credentials.hash, user.id);
-        database.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
-        database.exec('COMMIT');
+        await database.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+        await database.exec('COMMIT');
       } catch (error) {
-        if (database.isTransaction) database.exec('ROLLBACK');
+        try {
+          await database.exec('ROLLBACK');
+        } catch {
+          // no-op
+        }
         throw error;
       }
       sendJson(response, 200, {
@@ -840,14 +844,14 @@ function createAuthServer({
     }
 
     if (isAccountUpdate || isPasswordChange) {
-      const currentUser = findUserForSession(request);
+      const currentUser = await findUserForSession(request);
       if (!currentUser) {
         sendJson(response, 401, { error: 'Not signed in.' });
         return;
       }
 
       validatePassword(input.currentPassword);
-      const storedCredentials = database.prepare(
+      const storedCredentials = await database.prepare(
         'SELECT password_salt, password_hash FROM users WHERE id = ?',
       ).get(currentUser.id);
       const passwordIsValid = storedCredentials && await passwordMatches(
@@ -865,7 +869,7 @@ function createAuthServer({
         const lastName = getName(input.lastName, 'last name');
         const identifier = normalizeIdentifier(input.identifier);
         try {
-          database.prepare(`
+          await database.prepare(`
             UPDATE users SET first_name = ?, last_name = ?, identifier = ? WHERE id = ?
           `).run(firstName, lastName, identifier, currentUser.id);
         } catch (error) {
@@ -891,11 +895,11 @@ function createAuthServer({
         throw httpError(400, 'Choose a new password that is different from your current one.');
       }
       const credentials = await hashPassword(input.newPassword);
-      database.prepare(`
+      await database.prepare(`
         UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?
       `).run(credentials.salt, credentials.hash, currentUser.id);
-      database.prepare('DELETE FROM sessions WHERE user_id = ?').run(currentUser.id);
-      const token = createSession(currentUser.id);
+      await database.prepare('DELETE FROM sessions WHERE user_id = ?').run(currentUser.id);
+      const token = await createSession(currentUser.id);
       sendJson(response, 200, { ok: true }, {
         'Set-Cookie': sessionCookie(token),
       });
@@ -912,7 +916,7 @@ function createAuthServer({
       const credentials = await hashPassword(password);
       let result;
       try {
-        result = database.prepare(`
+        result = await database.prepare(`
           INSERT INTO users (first_name, last_name, identifier, password_salt, password_hash, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
         `).run(firstName, lastName, identifier, credentials.salt, credentials.hash, Date.now());
@@ -923,14 +927,14 @@ function createAuthServer({
         throw error;
       }
 
-      const token = createSession(Number(result.lastInsertRowid));
+      const token = await createSession(Number(result.lastInsertRowid));
       sendJson(response, 201, { ok: true }, {
         'Set-Cookie': sessionCookie(token),
       });
       return;
     }
 
-    const user = database.prepare(`
+    const user = await database.prepare(`
       SELECT id, password_salt, password_hash
       FROM users WHERE identifier = ?
     `).get(identifier);
@@ -945,7 +949,7 @@ function createAuthServer({
       return;
     }
 
-    const token = createSession(user.id);
+    const token = await createSession(user.id);
     sendJson(response, 200, { ok: true }, {
       'Set-Cookie': sessionCookie(token),
     });
@@ -1029,16 +1033,29 @@ function createAuthServer({
     void handleRequest(request, response);
   });
   server.database = database;
+
+  const sessionCleanupInterval = setInterval(() => {
+    void purgeExpiredSessions(database).catch((error) => {
+      console.error('Session cleanup failed.', error);
+    });
+  }, 60_000);
+
   server.on('close', () => clearInterval(sessionCleanupInterval));
   return server;
 }
 
 if (require.main === module) {
-  const server = createAuthServer();
-  const port = Number(process.env.PORT) || 3000;
-  server.listen(port, () => {
-    console.log(`Dreamers authentication server listening on port ${port}`);
-  });
+  createAuthServer()
+    .then((server) => {
+      const port = Number(process.env.PORT) || 3000;
+      server.listen(port, () => {
+        console.log(`Dreamers authentication server listening on port ${port}`);
+      });
+    })
+    .catch((error) => {
+      console.error('Failed to start server.', error);
+      process.exit(1);
+    });
 }
 
 module.exports = { createAuthServer };
