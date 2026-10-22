@@ -3,15 +3,19 @@ const accountLoading = document.querySelector('#account-loading');
 const accountForms = document.querySelectorAll('[data-account-form]');
 const accountCourseList = document.querySelector('#account-course-list');
 const accountCourseStatus = document.querySelector('#account-course-status');
+const accountPaymentStatus = document.querySelector('#account-payment-status');
 
-function renderEnrolledCourses(courses) {
+function renderEnrolledCourses(courses, paymentRequests = []) {
   accountCourseList.replaceChildren();
-  if (courses.length === 0) {
-    accountCourseStatus.textContent = 'You have not enrolled in any courses yet.';
-    return;
-  }
-
-  accountCourseStatus.textContent = `${courses.length} course${courses.length === 1 ? '' : 's'} in your account.`;
+  accountCourseStatus.textContent = courses.length === 0
+    ? 'You have not enrolled in any courses yet.'
+    : `${courses.length} course${courses.length === 1 ? '' : 's'} in your account.`;
+  const pending = paymentRequests.filter((request) => request.status === 'pending');
+  const rejected = paymentRequests.filter((request) => request.status === 'rejected');
+  accountPaymentStatus.textContent = [
+    ...pending.map((request) => `Payment for ${request.courseTitle} is awaiting review.`),
+    ...rejected.map((request) => `Payment for ${request.courseTitle} was not approved; contact support before trying again.`),
+  ].join(' ');
   courses.forEach((course) => {
     const item = document.createElement('li');
     item.className = 'account-course-item';
@@ -59,8 +63,8 @@ async function loadEnrolledCourses() {
   if (!response.ok) {
     throw new Error('Could not load your courses. Refresh the page to try again.');
   }
-  const { courses } = await response.json();
-  renderEnrolledCourses(courses);
+  const { courses, paymentRequests = [] } = await response.json();
+  renderEnrolledCourses(courses, paymentRequests);
 }
 
 function showFormMessage(form, text, state) {

@@ -16,6 +16,38 @@ body {
   padding: 20px;
 }
 
+body:has(.form-legal-footer) {
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+.form-legal-footer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 0;
+}
+
+.form-legal-footer .legal-links {
+  justify-content: center;
+}
+
+.form-legal-footer .legal-links a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  color: #013ca8;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.form-legal-footer .legal-links a:hover,
+.form-legal-footer .legal-links a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 .form-nav {
   position: absolute;
   top: 16px;
@@ -25,6 +57,44 @@ body {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 4px 14px;
+}
+
+.form-nav .menu-toggle {
+  display: none;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  background: transparent;
+  color: #013ca8;
+  cursor: pointer;
+}
+
+.form-nav .menu-toggle span {
+  width: 18px;
+  height: 2px;
+  display: block;
+  border-radius: 2px;
+  background: currentColor;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.form-nav.is-open .menu-toggle span:first-child {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.form-nav.is-open .menu-toggle span:nth-child(2) {
+  opacity: 0;
+}
+
+.form-nav.is-open .menu-toggle span:last-child {
+  transform: translateY(-7px) rotate(-45deg);
 }
 
 .form-nav a {
@@ -37,9 +107,29 @@ body {
   text-decoration: none;
 }
 
+.form-nav .nav-profile-link svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
 .form-nav a:hover {
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+
+.form-nav .nav-join {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 4px;
+  background: #014ec5;
+  color: #fff;
+}
+
+.form-nav .nav-join:hover,
+.form-nav .nav-join:focus-visible {
+  background: #013ca8;
+  text-decoration: none;
 }
 
 .login-container {
@@ -90,6 +180,22 @@ body {
 
 .input-group input:focus {
   border-color: #3b82f6;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.input-group input[inputmode="numeric"] {
+  letter-spacing: 0.18em;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 .form-options {
@@ -184,20 +290,56 @@ textarea:focus {
   box-shadow: 0 0 5px rgba(0, 123, 255, 0.3); 
 }
 
-@media (max-width: 640px) {
-  body {
-    padding-top: 100px;
-  }
+@media (max-width: 768px) {
   .form-nav {
     top: 16px;
     right: 16px;
     left: 16px;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    padding: 0;
+  }
+
+  .form-nav .menu-toggle {
+    display: flex;
+  }
+
+  .form-nav > a {
+    display: none;
+  }
+
+  .form-nav.is-open {
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(1, 60, 168, 0.16);
+  }
+
+  .form-nav.is-open > a {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
     justify-content: center;
-    gap: 4px 12px;
+    border-top: 1px solid rgba(1, 60, 168, 0.12);
   }
+
+  .form-nav.is-open > .nav-join {
+    align-self: center;
+    margin-top: 8px;
+    border-top: 0;
+  }
+
   body {
-    padding-top: 180px;
+    padding-top: 120px;
   }
+
+  .login-card {
+    padding: 40px 28px;
+  }
+}
+
+@media (max-width: 640px) {
   .brand-container {
     top: 20px;
     left: 20px;

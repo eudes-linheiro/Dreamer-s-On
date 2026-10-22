@@ -1,5 +1,18 @@
+import {
+  assertRecoveryConfiguration,
+  assertResetSecret,
+  constantTimeEqual,
+  createRecoveryCode,
+  deliverRecoveryCode,
+  getRecoveryChannel,
+  hashRecoveryCode,
+} from '../_shared/password-recovery.mjs';
+
 const SESSION_COOKIE = 'dreamers_session';
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_RESEND_DELAY_MS = 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 const JSON_BODY_LIMIT = 16 * 1024;
 const PHOTO_BODY_LIMIT = 2 * 1024 * 1024;
 const PASSWORD_ITERATIONS = 120_000;
@@ -235,22 +248,107 @@ async function api(request, env, url) {
   const isCurrentUser = route === '/api/auth/me';
   const isAccountUpdate = route === '/api/auth/account';
   const isPasswordChange = route === '/api/auth/password';
+  const isPasswordResetRequest = route === '/api/auth/password-reset/request';
+  const isPasswordResetVerify = route === '/api/auth/password-reset/verify';
   const isPhoto = route === '/api/auth/photo';
   const isContact = route === '/api/contact';
   const isCourseCatalog = route === '/api/courses';
   const isCourseEnrollments = route === '/api/courses/enrollments';
+  const isCoursePaymentDetails = route === '/api/courses/payment-details';
+  const isAdminCoursePayments = route === '/api/admin/course-payments';
+  const adminCoursePaymentRoute = route.match(/^\/api\/admin\/course-payments\/(\d+)$/);
   const enrollmentRoute = route.match(/^\/api\/courses\/([a-z0-9-]+)\/enrollment$/);
   const knownRoute = [isRegister, isLogin, isLogout, isCurrentUser, isAccountUpdate, isPasswordChange,
-    isPhoto, isContact, isCourseCatalog, isCourseEnrollments].some(Boolean) || enrollmentRoute;
+    isPasswordResetRequest, isPasswordResetVerify,
+    isPhoto, isContact, isCourseCatalog, isCourseEnrollments, isCoursePaymentDetails,
+    isAdminCoursePayments].some(Boolean) || enrollmentRoute || adminCoursePaymentRoute;
   if (!knownRoute) return errorResponse(404, 'Not found.');
 
-  const expectedMethod = isCurrentUser || isCourseCatalog || isCourseEnrollments ? 'GET' : 'POST';
-  const allowedMethods = isPhoto || enrollmentRoute ? ['GET', 'POST', 'DELETE'] : [expectedMethod];
+  const expectedMethod = isCurrentUser || isCourseCatalog || isCourseEnrollments
+    || isCoursePaymentDetails || isAdminCoursePayments ? 'GET' : 'POST';
+  const allowedMethods = isPhoto || enrollmentRoute ? ['GET', 'POST', 'DELETE']
+    : adminCoursePaymentRoute ? ['POST'] : [expectedMethod];
   if (!allowedMethods.includes(request.method)) {
     return errorResponse(405, 'Method not allowed.');
   }
 
   if (isCourseCatalog) return jsonResponse(200, { courses: COURSES });
+
+  if (isCoursePaymentDetails) {
+    return jsonResponse(200, {
+      fee: 3000,
+      currency: 'AOA',
+      instructions: env.COURSE_PAYMENT_INSTRUCTIONS || '',
+    });
+  }
+
+  if (isAdminCoursePayments || adminCoursePaymentRoute) {
+    const user = await findUser(request, env);
+    if (!user) return errorResponse(401, 'Not signed in.');
+    const adminUserId = Number(env.COURSE_PAYMENT_ADMIN_USER_ID);
+    if (!Number.isSafeInteger(adminUserId) || adminUserId < 1) {
+      return errorResponse(503, 'Course payment review is not configured.');
+    }
+    if (user.id !== adminUserId) {
+      return errorResponse(403, 'You are not authorized to review course payments.');
+    }
+    if (isAdminCoursePayments) {
+      const rows = await env.DB.prepare(`
+        SELECT requests.id, requests.transaction_reference AS transactionReference,
+          requests.created_at AS createdAt, users.first_name AS firstName,
+          users.last_name AS lastName, users.identifier, courses.title AS courseTitle
+        FROM course_payment_requests AS requests
+        JOIN users ON users.id = requests.user_id
+        JOIN courses ON courses.id = requests.course_id
+        WHERE requests.status = 'pending'
+        ORDER BY requests.created_at ASC
+      `).all();
+      return jsonResponse(200, { requests: rows.results });
+    }
+
+    const requestId = Number(adminCoursePaymentRoute[1]);
+    if (!Number.isSafeInteger(requestId) || requestId < 1) {
+      return errorResponse(404, 'Payment request not found.');
+    }
+    const input = await readJson(request);
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw httpError(400, 'Request body must be a JSON object.');
+    }
+    if (!['approve', 'reject'].includes(input.action)) {
+      throw httpError(400, 'Choose approve or reject.');
+    }
+    const payment = await env.DB.prepare(
+      'SELECT id FROM course_payment_requests WHERE id = ? AND status = ?',
+    ).bind(requestId, 'pending').first();
+    if (!payment) {
+      const exists = await env.DB.prepare('SELECT id FROM course_payment_requests WHERE id = ?')
+        .bind(requestId).first();
+      return errorResponse(exists ? 409 : 404,
+        exists ? 'This payment request has already been reviewed.' : 'Payment request not found.');
+    }
+    const nextStatus = input.action === 'approve' ? 'approved' : 'rejected';
+    const statements = [
+      env.DB.prepare(`
+        UPDATE course_payment_requests
+        SET status = ?, reviewed_at = ?, reviewed_by = ?
+        WHERE id = ? AND status = 'pending'
+      `).bind(nextStatus, Date.now(), user.id, requestId),
+    ];
+    if (input.action === 'approve') {
+      statements.push(env.DB.prepare(`
+        INSERT INTO course_enrollments (user_id, course_id, enrolled_at)
+        SELECT user_id, course_id, ?
+        FROM course_payment_requests
+        WHERE id = ? AND status = 'approved'
+        ON CONFLICT (user_id, course_id) DO NOTHING
+      `).bind(Date.now(), requestId));
+    }
+    const results = await env.DB.batch(statements);
+    if (results[0].meta.changes === 0) {
+      return errorResponse(409, 'This payment request has already been reviewed.');
+    }
+    return jsonResponse(200, { status: nextStatus });
+  }
 
   if (isCurrentUser) {
     const user = await findUser(request, env);
@@ -291,6 +389,12 @@ async function api(request, env, url) {
 
   if (isRegister && isRateLimited(request, 'register', 8)) return errorResponse(429, 'Too many attempts. Try again in a minute.');
   if (isLogin && isRateLimited(request, 'login', 10)) return errorResponse(429, 'Too many attempts. Try again in a minute.');
+  if (isPasswordResetRequest && isRateLimited(request, 'password-reset-request', 5)) {
+    return errorResponse(429, 'Too many requests. Wait a minute before trying again.');
+  }
+  if (isPasswordResetVerify && isRateLimited(request, 'password-reset-verify', 10)) {
+    return errorResponse(429, 'Too many attempts. Wait a minute before trying again.');
+  }
   if ((isAccountUpdate || isPasswordChange) && isRateLimited(request, route, 8)) return errorResponse(429, 'Too many attempts. Try again in a minute.');
   if (isContact && isRateLimited(request, 'contact', 5)) return errorResponse(429, 'Too many messages. Try again in a minute.');
   if (enrollmentRoute && isRateLimited(request, 'course-enrollment', 20)) return errorResponse(429, 'Too many course changes. Try again in a minute.');
@@ -305,18 +409,62 @@ async function api(request, env, url) {
         WHERE course_enrollments.user_id = ?
         ORDER BY course_enrollments.enrolled_at DESC
       `).bind(user.id).all();
-      return jsonResponse(200, { courses: rows.results });
+      const paymentRequests = await env.DB.prepare(`
+        SELECT requests.id, requests.course_id AS courseId, courses.title AS courseTitle,
+          requests.status, requests.created_at AS createdAt
+        FROM course_payment_requests AS requests
+        JOIN courses ON courses.id = requests.course_id
+        WHERE requests.user_id = ?
+          AND requests.status IN ('pending', 'rejected')
+          AND requests.id = (
+            SELECT MAX(latest.id) FROM course_payment_requests AS latest
+            WHERE latest.user_id = requests.user_id AND latest.course_id = requests.course_id
+          )
+        ORDER BY requests.created_at DESC
+      `).bind(user.id).all();
+      return jsonResponse(200, { courses: rows.results, paymentRequests: paymentRequests.results });
     }
     const courseId = enrollmentRoute[1];
     const course = COURSES.find((item) => item.id === courseId);
     if (!course) return errorResponse(404, 'Course not found.');
     if (request.method === 'POST') {
-      const result = await env.DB.prepare(`
-        INSERT INTO course_enrollments (user_id, course_id, enrolled_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT (user_id, course_id) DO NOTHING
-      `).bind(user.id, courseId, Date.now()).run();
-      return jsonResponse(200, { enrolled: true, alreadyEnrolled: result.meta.changes === 0 });
+      if (!String(env.COURSE_PAYMENT_INSTRUCTIONS || '').trim()) {
+        return errorResponse(503, 'Course payment instructions are not configured. Please contact support.');
+      }
+      const input = await readJson(request);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw httpError(400, 'Request body must be a JSON object.');
+      }
+      const transactionReference = typeof input.transactionReference === 'string'
+        ? input.transactionReference.trim() : '';
+      if (transactionReference.length < 3 || transactionReference.length > 100) {
+        throw httpError(400, 'Enter a payment reference between 3 and 100 characters.');
+      }
+      const existingEnrollment = await env.DB.prepare(
+        'SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?',
+      ).bind(user.id, courseId).first();
+      if (existingEnrollment) {
+        return jsonResponse(200, { enrolled: true, alreadyEnrolled: true });
+      }
+      await env.DB.prepare(`
+        INSERT INTO course_payment_requests (user_id, course_id, transaction_reference, status, created_at)
+        SELECT ?, ?, ?, 'pending', ?
+        WHERE NOT EXISTS (
+          SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?
+        )
+        ON CONFLICT DO NOTHING
+      `).bind(user.id, courseId, transactionReference, Date.now(), user.id, courseId).run();
+      const approvedEnrollment = await env.DB.prepare(
+        'SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?',
+      ).bind(user.id, courseId).first();
+      if (approvedEnrollment) {
+        return jsonResponse(200, { enrolled: true, alreadyEnrolled: true });
+      }
+      const paymentRequest = await env.DB.prepare(`
+        SELECT id FROM course_payment_requests
+        WHERE user_id = ? AND course_id = ? AND status = 'pending'
+      `).bind(user.id, courseId).first();
+      return jsonResponse(201, { enrolled: false, paymentPending: true, requestId: paymentRequest.id });
     }
     await env.DB.prepare('DELETE FROM course_enrollments WHERE user_id = ? AND course_id = ?')
       .bind(user.id, courseId).run();
@@ -343,6 +491,111 @@ async function api(request, env, url) {
     await env.DB.prepare('INSERT INTO contact_messages (name, email, message, created_at) VALUES (?, ?, ?, ?)')
       .bind(name, email, message, Date.now()).run();
     return jsonResponse(201, { ok: true, message: 'Your message has been received. Thank you for getting in touch.' });
+  }
+
+  if (isPasswordResetRequest) {
+    const identifier = normalizeIdentifier(input.identifier);
+    const channel = getRecoveryChannel(identifier);
+    try {
+      assertRecoveryConfiguration(channel, env);
+    } catch {
+      throw httpError(503, 'Password recovery is not configured for this contact method. Please contact support.');
+    }
+
+    const user = await env.DB.prepare('SELECT id FROM users WHERE identifier = ?').bind(identifier).first();
+    if (user) {
+      const now = Date.now();
+      const code = createRecoveryCode();
+      const codeHash = await hashRecoveryCode(env.PASSWORD_RESET_SECRET, user.id, code);
+      const issued = await env.DB.prepare(`
+        INSERT INTO password_reset_codes (user_id, code_hash, expires_at, attempts, requested_at)
+        VALUES (?, ?, ?, 0, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          code_hash = excluded.code_hash,
+          expires_at = excluded.expires_at,
+          attempts = 0,
+          requested_at = excluded.requested_at
+        WHERE password_reset_codes.requested_at <= ?
+      `).bind(user.id, codeHash, now + PASSWORD_RESET_CODE_TTL_MS, now, now - PASSWORD_RESET_RESEND_DELAY_MS).run();
+
+      if (issued.meta.changes === 1) {
+        try {
+          await deliverRecoveryCode(channel, identifier, code, env);
+        } catch (error) {
+          await env.DB.prepare('DELETE FROM password_reset_codes WHERE user_id = ? AND code_hash = ?')
+            .bind(user.id, codeHash).run();
+          console.error('Password reset code delivery failed.', error);
+          throw httpError(502, 'We could not send a verification code. Please try again later.');
+        }
+      }
+    }
+
+    return jsonResponse(202, {
+      ok: true,
+      message: 'If an account matches those details, a verification code has been sent.',
+    });
+  }
+
+  if (isPasswordResetVerify) {
+    const identifier = normalizeIdentifier(input.identifier);
+    try {
+      assertResetSecret(env.PASSWORD_RESET_SECRET);
+    } catch {
+      throw httpError(503, 'Password recovery is not configured. Please contact support.');
+    }
+    if (typeof input.code !== 'string' || !/^\d{6}$/.test(input.code)) {
+      throw httpError(400, 'Enter the 6-digit verification code.');
+    }
+    validatePassword(input.newPassword);
+    const user = await env.DB.prepare('SELECT id FROM users WHERE identifier = ?').bind(identifier).first();
+    if (!user) throw httpError(400, 'The verification code is invalid or expired.');
+
+    const record = await env.DB.prepare(`
+      SELECT code_hash, expires_at, attempts
+      FROM password_reset_codes WHERE user_id = ?
+    `).bind(user.id).first();
+    const now = Date.now();
+    if (!record || record.expires_at <= now || record.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+      await env.DB.prepare('DELETE FROM password_reset_codes WHERE user_id = ?').bind(user.id).run();
+      throw httpError(400, 'The verification code is invalid or expired.');
+    }
+
+    const submittedHash = await hashRecoveryCode(env.PASSWORD_RESET_SECRET, user.id, input.code);
+    if (!constantTimeEqual(submittedHash, record.code_hash)) {
+      await env.DB.prepare(`
+        UPDATE password_reset_codes SET attempts = attempts + 1
+        WHERE user_id = ? AND attempts < ?
+      `).bind(user.id, PASSWORD_RESET_MAX_ATTEMPTS).run();
+      throw httpError(400, 'The verification code is invalid or expired.');
+    }
+
+    const credentials = await hashPassword(input.newPassword);
+    const recoveryCondition = `
+      EXISTS (
+        SELECT 1 FROM password_reset_codes
+        WHERE user_id = ? AND code_hash = ? AND expires_at > ? AND attempts < ?
+      )
+    `;
+    const results = await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE users SET password_salt = ?, password_hash = ?
+        WHERE id = ? AND ${recoveryCondition}
+      `).bind(credentials.salt, credentials.hash, user.id, user.id, record.code_hash, now, PASSWORD_RESET_MAX_ATTEMPTS),
+      env.DB.prepare(`
+        DELETE FROM password_reset_codes
+        WHERE user_id = ? AND code_hash = ? AND expires_at > ? AND attempts < ?
+      `).bind(user.id, record.code_hash, now, PASSWORD_RESET_MAX_ATTEMPTS),
+      env.DB.prepare(`
+        DELETE FROM sessions
+        WHERE user_id = ? AND EXISTS (
+          SELECT 1 FROM users WHERE id = ? AND password_salt = ? AND password_hash = ?
+        )
+      `).bind(user.id, user.id, credentials.salt, credentials.hash),
+    ]);
+    if (results[0].meta.changes !== 1) {
+      throw httpError(400, 'The verification code is invalid or expired.');
+    }
+    return jsonResponse(200, { ok: true, message: 'Your password has been reset. Sign in with your new password.' });
   }
 
   if (isAccountUpdate || isPasswordChange) {
