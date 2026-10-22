@@ -1,0 +1,1220 @@
+------formdata-undici-091906377409
+Content-Disposition: form-data; name="metadata"
+
+{"main_module":"functionsWorker-0.7112121871847776.js"}
+------formdata-undici-091906377409
+Content-Disposition: form-data; name="functionsWorker-0.7112121871847776.js"; filename="functionsWorker-0.7112121871847776.js"
+Content-Type: application/javascript+module
+
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
+// _shared/password-recovery.mjs
+var textEncoder = new TextEncoder();
+function getRecoveryChannel(identifier) {
+  return identifier.includes("@") ? "email" : "sms";
+}
+__name(getRecoveryChannel, "getRecoveryChannel");
+function assertResetSecret(secret) {
+  if (typeof secret !== "string" || secret.length < 32) {
+    throw new Error("Password recovery is not configured.");
+  }
+}
+__name(assertResetSecret, "assertResetSecret");
+function assertRecoveryConfiguration(channel, env) {
+  assertResetSecret(env.PASSWORD_RESET_SECRET);
+  if (channel === "email") {
+    if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL) {
+      throw new Error("Email recovery is not configured.");
+    }
+    return;
+  }
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM_PHONE) {
+    throw new Error("SMS recovery is not configured.");
+  }
+}
+__name(assertRecoveryConfiguration, "assertRecoveryConfiguration");
+function createRecoveryCode() {
+  const range = 9e5;
+  const limit = Math.floor(4294967296 / range) * range;
+  const randomValues = new Uint32Array(1);
+  let value;
+  do {
+    crypto.getRandomValues(randomValues);
+    [value] = randomValues;
+  } while (value >= limit);
+  return String(1e5 + value % range);
+}
+__name(createRecoveryCode, "createRecoveryCode");
+async function hashRecoveryCode(secret, userId, code) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const digest = await crypto.subtle.sign("HMAC", key, textEncoder.encode(`${userId}:${code}`));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+__name(hashRecoveryCode, "hashRecoveryCode");
+function constantTimeEqual(first, second) {
+  let difference = first.length ^ second.length;
+  for (let index = 0; index < Math.min(first.length, second.length); index += 1) {
+    difference |= first.charCodeAt(index) ^ second.charCodeAt(index);
+  }
+  return difference === 0;
+}
+__name(constantTimeEqual, "constantTimeEqual");
+async function deliverRecoveryCode(channel, destination, code, env) {
+  assertRecoveryConfiguration(channel, env);
+  const message = `Your Dreamer's On verification code is ${code}. It expires in 10 minutes. If you did not request this code, you can ignore this message.`;
+  let response;
+  if (channel === "email") {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: env.RESEND_FROM_EMAIL,
+        to: [destination],
+        subject: "Your Dreamer\u2019s On password reset code",
+        text: message
+      }),
+      signal: AbortSignal.timeout(1e4)
+    });
+  } else {
+    const credentials = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
+    const body = new URLSearchParams({
+      From: env.TWILIO_FROM_PHONE,
+      To: destination,
+      Body: message
+    });
+    response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(env.TWILIO_ACCOUNT_SID)}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body,
+        signal: AbortSignal.timeout(1e4)
+      }
+    );
+  }
+  if (!response.ok) {
+    throw new Error(`Recovery message delivery failed with status ${response.status}.`);
+  }
+}
+__name(deliverRecoveryCode, "deliverRecoveryCode");
+
+// api/[[path]].js
+var SESSION_COOKIE = "dreamers_session";
+var SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+var PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1e3;
+var PASSWORD_RESET_RESEND_DELAY_MS = 60 * 1e3;
+var PASSWORD_RESET_MAX_ATTEMPTS = 5;
+var JSON_BODY_LIMIT = 16 * 1024;
+var PHOTO_BODY_LIMIT = 2 * 1024 * 1024;
+var PASSWORD_ITERATIONS = 12e4;
+var COURSES = [
+  { id: "english-foundations", title: "English foundations", category: "Language" },
+  { id: "french-essentials", title: "French essentials", category: "Language" },
+  { id: "music-theory", title: "Music theory", category: "Music" },
+  { id: "music-production", title: "Music production", category: "Music" }
+];
+var rateLimits = /* @__PURE__ */ new Map();
+function jsonResponse(status, body, headers = {}) {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", ...headers }
+  });
+}
+__name(jsonResponse, "jsonResponse");
+function errorResponse(status, message) {
+  return jsonResponse(status, { error: message });
+}
+__name(errorResponse, "errorResponse");
+function httpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+__name(httpError, "httpError");
+async function readBytes(request, maximumBytes) {
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > maximumBytes) {
+    throw httpError(413, "Request body is too large.");
+  }
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return new Uint8Array();
+  }
+  const chunks = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maximumBytes) {
+      await reader.cancel();
+      throw httpError(413, "Request body is too large.");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+__name(readBytes, "readBytes");
+async function readJson(request, maximumBytes = JSON_BODY_LIMIT) {
+  if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) {
+    throw httpError(415, "Content-Type must be application/json.");
+  }
+  const bytes = await readBytes(request, maximumBytes);
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw httpError(400, "Request body must contain valid JSON.");
+  }
+}
+__name(readJson, "readJson");
+function normalizeEmail(value) {
+  if (typeof value !== "string") {
+    throw httpError(400, "Enter a valid email address.");
+  }
+  const email = value.trim().toLowerCase();
+  const [localPart, ...domainParts] = email.split("@");
+  const domain = domainParts.join("@");
+  const labels = domain.split(".");
+  const validLocalPart = localPart && localPart.length <= 64 && !localPart.startsWith(".") && !localPart.endsWith(".") && !localPart.includes("..") && /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(localPart);
+  const validDomain = domain.length <= 253 && labels.length >= 2 && labels.every((label) => label.length > 0 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)) && labels.at(-1).length >= 2;
+  if (!validLocalPart || !validDomain || email.length > 254) {
+    throw httpError(400, "Enter a valid email address.");
+  }
+  return email;
+}
+__name(normalizeEmail, "normalizeEmail");
+function normalizeIdentifier(value) {
+  if (typeof value !== "string") {
+    throw httpError(400, "Enter a valid email address or Angola phone number.");
+  }
+  const identifier = value.trim();
+  if (identifier.includes("@")) return normalizeEmail(identifier);
+  if (!/^\+?[\d\s().-]+$/.test(identifier)) {
+    throw httpError(400, "Enter an Angola phone number with 9 digits and country code +244.");
+  }
+  const compact = identifier.replace(/[\s().-]/g, "");
+  let nationalNumber = compact;
+  if (compact.startsWith("+244")) nationalNumber = compact.slice(4);
+  else if (compact.startsWith("00244")) nationalNumber = compact.slice(5);
+  else if (compact.startsWith("244") && compact.length === 12) nationalNumber = compact.slice(3);
+  if (!/^[2-9]\d{8}$/.test(nationalNumber)) {
+    throw httpError(400, "Enter an Angola phone number with 9 digits and country code +244.");
+  }
+  return `+244${nationalNumber}`;
+}
+__name(normalizeIdentifier, "normalizeIdentifier");
+function getName(value, field) {
+  if (typeof value !== "string") throw httpError(400, `Enter your ${field}.`);
+  const name = value.trim();
+  if (!name || name.length > 80) throw httpError(400, `Enter a ${field} up to 80 characters long.`);
+  return name;
+}
+__name(getName, "getName");
+function validatePassword(password) {
+  if (typeof password !== "string" || password.length < 8 || password.length > 128) {
+    throw httpError(400, "Password must be between 8 and 128 characters.");
+  }
+}
+__name(validatePassword, "validatePassword");
+function toBase64Url(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+__name(toBase64Url, "toBase64Url");
+function fromBase64Url(value) {
+  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+  const binary = atob(base64 + "=".repeat((4 - base64.length % 4) % 4));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+__name(fromBase64Url, "fromBase64Url");
+async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
+  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const hash = await crypto.subtle.deriveBits({
+    name: "PBKDF2",
+    hash: "SHA-256",
+    salt,
+    iterations: PASSWORD_ITERATIONS
+  }, material, 256);
+  return { salt: toBase64Url(salt), hash: toBase64Url(new Uint8Array(hash)) };
+}
+__name(hashPassword, "hashPassword");
+async function passwordMatches(password, saltValue, hashValue) {
+  const { hash } = await hashPassword(password, fromBase64Url(saltValue));
+  const actual = fromBase64Url(hash);
+  const expected = fromBase64Url(hashValue);
+  if (actual.length !== expected.length) return false;
+  let difference = 0;
+  for (let index = 0; index < actual.length; index += 1) difference |= actual[index] ^ expected[index];
+  return difference === 0;
+}
+__name(passwordMatches, "passwordMatches");
+async function sha256(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return toBase64Url(new Uint8Array(digest));
+}
+__name(sha256, "sha256");
+function getCookie(request, name) {
+  const entry = (request.headers.get("cookie") || "").split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
+  return entry ? entry.slice(name.length + 1) : null;
+}
+__name(getCookie, "getCookie");
+function sessionCookie(token, maxAge = SESSION_TTL_SECONDS) {
+  return `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+}
+__name(sessionCookie, "sessionCookie");
+async function createSession(env, userId) {
+  const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+  const token = toBase64Url(tokenBytes);
+  const expiresAt = Math.floor(Date.now() / 1e3) + SESSION_TTL_SECONDS;
+  await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(token), userId, expiresAt).run();
+  return token;
+}
+__name(createSession, "createSession");
+async function findUser(request, env) {
+  const token = getCookie(request, SESSION_COOKIE);
+  if (!token || !/^[\w-]{40,50}$/.test(token)) return null;
+  const tokenHash = await sha256(token);
+  const now = Math.floor(Date.now() / 1e3);
+  await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now).run();
+  return env.DB.prepare(`
+    SELECT users.id, users.first_name, users.last_name, users.identifier, users.photo_key
+    FROM sessions JOIN users ON users.id = sessions.user_id
+    WHERE sessions.token_hash = ? AND sessions.expires_at > ?
+  `).bind(tokenHash, now).first();
+}
+__name(findUser, "findUser");
+function isRateLimited(request, key, maximum) {
+  const now = Date.now();
+  const address = request.headers.get("CF-Connecting-IP") || "unknown";
+  const rateKey = `${key}:${address}`;
+  const current = rateLimits.get(rateKey);
+  if (!current || current.resetAt <= now) {
+    rateLimits.set(rateKey, { count: 1, resetAt: now + 6e4 });
+    return false;
+  }
+  current.count += 1;
+  return current.count > maximum;
+}
+__name(isRateLimited, "isRateLimited");
+function validPhoto(bytes, mimeType) {
+  if (bytes.length === 0 || bytes.length > PHOTO_BODY_LIMIT) return false;
+  if (mimeType === "image/jpeg") {
+    return bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 && bytes[bytes.length - 2] === 255 && bytes[bytes.length - 1] === 217;
+  }
+  if (mimeType === "image/png") {
+    return bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => bytes[index] === byte);
+  }
+  if (mimeType === "image/webp") {
+    return bytes.length >= 12 && new TextDecoder().decode(bytes.subarray(0, 4)) === "RIFF" && new TextDecoder().decode(bytes.subarray(8, 12)) === "WEBP";
+  }
+  return false;
+}
+__name(validPhoto, "validPhoto");
+async function api(request, env, url) {
+  const route = url.pathname;
+  const isRegister = route === "/api/auth/register";
+  const isLogin = route === "/api/auth/login";
+  const isLogout = route === "/api/auth/logout";
+  const isCurrentUser = route === "/api/auth/me";
+  const isAccountUpdate = route === "/api/auth/account";
+  const isPasswordChange = route === "/api/auth/password";
+  const isPasswordResetRequest = route === "/api/auth/password-reset/request";
+  const isPasswordResetVerify = route === "/api/auth/password-reset/verify";
+  const isPhoto = route === "/api/auth/photo";
+  const isContact = route === "/api/contact";
+  const isCourseCatalog = route === "/api/courses";
+  const isCourseEnrollments = route === "/api/courses/enrollments";
+  const isCoursePaymentDetails = route === "/api/courses/payment-details";
+  const isAdminCoursePayments = route === "/api/admin/course-payments";
+  const adminCoursePaymentRoute = route.match(/^\/api\/admin\/course-payments\/(\d+)$/);
+  const enrollmentRoute = route.match(/^\/api\/courses\/([a-z0-9-]+)\/enrollment$/);
+  const knownRoute = [
+    isRegister,
+    isLogin,
+    isLogout,
+    isCurrentUser,
+    isAccountUpdate,
+    isPasswordChange,
+    isPasswordResetRequest,
+    isPasswordResetVerify,
+    isPhoto,
+    isContact,
+    isCourseCatalog,
+    isCourseEnrollments,
+    isCoursePaymentDetails,
+    isAdminCoursePayments
+  ].some(Boolean) || enrollmentRoute || adminCoursePaymentRoute;
+  if (!knownRoute) return errorResponse(404, "Not found.");
+  const expectedMethod = isCurrentUser || isCourseCatalog || isCourseEnrollments || isCoursePaymentDetails || isAdminCoursePayments ? "GET" : "POST";
+  const allowedMethods = isPhoto || enrollmentRoute ? ["GET", "POST", "DELETE"] : adminCoursePaymentRoute ? ["POST"] : [expectedMethod];
+  if (!allowedMethods.includes(request.method)) {
+    return errorResponse(405, "Method not allowed.");
+  }
+  if (isCourseCatalog) return jsonResponse(200, { courses: COURSES });
+  if (isCoursePaymentDetails) {
+    return jsonResponse(200, {
+      fee: 3e3,
+      currency: "AOA",
+      instructions: env.COURSE_PAYMENT_INSTRUCTIONS || ""
+    });
+  }
+  if (isAdminCoursePayments || adminCoursePaymentRoute) {
+    const user2 = await findUser(request, env);
+    if (!user2) return errorResponse(401, "Not signed in.");
+    const adminUserId = Number(env.COURSE_PAYMENT_ADMIN_USER_ID);
+    if (!Number.isSafeInteger(adminUserId) || adminUserId < 1) {
+      return errorResponse(503, "Course payment review is not configured.");
+    }
+    if (user2.id !== adminUserId) {
+      return errorResponse(403, "You are not authorized to review course payments.");
+    }
+    if (isAdminCoursePayments) {
+      const rows = await env.DB.prepare(`
+        SELECT requests.id, requests.transaction_reference AS transactionReference,
+          requests.created_at AS createdAt, users.first_name AS firstName,
+          users.last_name AS lastName, users.identifier, courses.title AS courseTitle
+        FROM course_payment_requests AS requests
+        JOIN users ON users.id = requests.user_id
+        JOIN courses ON courses.id = requests.course_id
+        WHERE requests.status = 'pending'
+        ORDER BY requests.created_at ASC
+      `).all();
+      return jsonResponse(200, { requests: rows.results });
+    }
+    const requestId = Number(adminCoursePaymentRoute[1]);
+    if (!Number.isSafeInteger(requestId) || requestId < 1) {
+      return errorResponse(404, "Payment request not found.");
+    }
+    const input2 = await readJson(request);
+    if (!input2 || typeof input2 !== "object" || Array.isArray(input2)) {
+      throw httpError(400, "Request body must be a JSON object.");
+    }
+    if (!["approve", "reject"].includes(input2.action)) {
+      throw httpError(400, "Choose approve or reject.");
+    }
+    const payment = await env.DB.prepare(
+      "SELECT id FROM course_payment_requests WHERE id = ? AND status = ?"
+    ).bind(requestId, "pending").first();
+    if (!payment) {
+      const exists = await env.DB.prepare("SELECT id FROM course_payment_requests WHERE id = ?").bind(requestId).first();
+      return errorResponse(
+        exists ? 409 : 404,
+        exists ? "This payment request has already been reviewed." : "Payment request not found."
+      );
+    }
+    const nextStatus = input2.action === "approve" ? "approved" : "rejected";
+    const statements = [
+      env.DB.prepare(`
+        UPDATE course_payment_requests
+        SET status = ?, reviewed_at = ?, reviewed_by = ?
+        WHERE id = ? AND status = 'pending'
+      `).bind(nextStatus, Date.now(), user2.id, requestId)
+    ];
+    if (input2.action === "approve") {
+      statements.push(env.DB.prepare(`
+        INSERT INTO course_enrollments (user_id, course_id, enrolled_at)
+        SELECT user_id, course_id, ?
+        FROM course_payment_requests
+        WHERE id = ? AND status = 'approved'
+        ON CONFLICT (user_id, course_id) DO NOTHING
+      `).bind(Date.now(), requestId));
+    }
+    const results = await env.DB.batch(statements);
+    if (results[0].meta.changes === 0) {
+      return errorResponse(409, "This payment request has already been reviewed.");
+    }
+    return jsonResponse(200, { status: nextStatus });
+  }
+  if (isCurrentUser) {
+    const user2 = await findUser(request, env);
+    if (!user2) return errorResponse(401, "Not signed in.");
+    const { photo_key: photoKey, ...publicUser } = user2;
+    return jsonResponse(200, { user: { ...publicUser, photo_url: photoKey ? "/api/auth/photo" : null } });
+  }
+  if (isPhoto) {
+    const user2 = await findUser(request, env);
+    if (!user2) return errorResponse(401, "Not signed in.");
+    if (request.method === "GET") {
+      if (!user2.photo_key) return errorResponse(404, "No profile photo.");
+      const photo = await env.PHOTOS.get(user2.photo_key);
+      if (!photo) return errorResponse(404, "No profile photo.");
+      return new Response(photo.body, {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Content-Type": photo.httpMetadata?.contentType || "application/octet-stream",
+          "X-Content-Type-Options": "nosniff"
+        }
+      });
+    }
+    if (isRateLimited(request, "profile-photo", 10)) return errorResponse(429, "Too many photo changes. Try again in a minute.");
+    if (request.method === "DELETE") {
+      if (user2.photo_key) await env.PHOTOS.delete(user2.photo_key);
+      await env.DB.prepare("UPDATE users SET photo_key = NULL WHERE id = ?").bind(user2.id).run();
+      return jsonResponse(200, { ok: true });
+    }
+    const mimeType = (request.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+    const bytes = await readBytes(request, PHOTO_BODY_LIMIT);
+    if (!validPhoto(bytes, mimeType)) return errorResponse(400, "Choose a valid JPEG, PNG, or WebP photo up to 2 MB.");
+    const photoKey = `profiles/${user2.id}`;
+    await env.PHOTOS.put(photoKey, bytes, { httpMetadata: { contentType: mimeType } });
+    await env.DB.prepare("UPDATE users SET photo_key = ? WHERE id = ?").bind(photoKey, user2.id).run();
+    return jsonResponse(200, { ok: true, photo_url: "/api/auth/photo" });
+  }
+  if (isRegister && isRateLimited(request, "register", 8)) return errorResponse(429, "Too many attempts. Try again in a minute.");
+  if (isLogin && isRateLimited(request, "login", 10)) return errorResponse(429, "Too many attempts. Try again in a minute.");
+  if (isPasswordResetRequest && isRateLimited(request, "password-reset-request", 5)) {
+    return errorResponse(429, "Too many requests. Wait a minute before trying again.");
+  }
+  if (isPasswordResetVerify && isRateLimited(request, "password-reset-verify", 10)) {
+    return errorResponse(429, "Too many attempts. Wait a minute before trying again.");
+  }
+  if ((isAccountUpdate || isPasswordChange) && isRateLimited(request, route, 8)) return errorResponse(429, "Too many attempts. Try again in a minute.");
+  if (isContact && isRateLimited(request, "contact", 5)) return errorResponse(429, "Too many messages. Try again in a minute.");
+  if (enrollmentRoute && isRateLimited(request, "course-enrollment", 20)) return errorResponse(429, "Too many course changes. Try again in a minute.");
+  if (isCourseEnrollments || enrollmentRoute) {
+    const user2 = await findUser(request, env);
+    if (!user2) return errorResponse(401, "Not signed in.");
+    if (isCourseEnrollments) {
+      const rows = await env.DB.prepare(`
+        SELECT courses.id, courses.title, courses.category, course_enrollments.enrolled_at AS enrolledAt
+        FROM course_enrollments JOIN courses ON courses.id = course_enrollments.course_id
+        WHERE course_enrollments.user_id = ?
+        ORDER BY course_enrollments.enrolled_at DESC
+      `).bind(user2.id).all();
+      const paymentRequests = await env.DB.prepare(`
+        SELECT requests.id, requests.course_id AS courseId, courses.title AS courseTitle,
+          requests.status, requests.created_at AS createdAt
+        FROM course_payment_requests AS requests
+        JOIN courses ON courses.id = requests.course_id
+        WHERE requests.user_id = ?
+          AND requests.status IN ('pending', 'rejected')
+          AND requests.id = (
+            SELECT MAX(latest.id) FROM course_payment_requests AS latest
+            WHERE latest.user_id = requests.user_id AND latest.course_id = requests.course_id
+          )
+        ORDER BY requests.created_at DESC
+      `).bind(user2.id).all();
+      return jsonResponse(200, { courses: rows.results, paymentRequests: paymentRequests.results });
+    }
+    const courseId = enrollmentRoute[1];
+    const course = COURSES.find((item) => item.id === courseId);
+    if (!course) return errorResponse(404, "Course not found.");
+    if (request.method === "POST") {
+      if (!String(env.COURSE_PAYMENT_INSTRUCTIONS || "").trim()) {
+        return errorResponse(503, "Course payment instructions are not configured. Please contact support.");
+      }
+      const input2 = await readJson(request);
+      if (!input2 || typeof input2 !== "object" || Array.isArray(input2)) {
+        throw httpError(400, "Request body must be a JSON object.");
+      }
+      const transactionReference = typeof input2.transactionReference === "string" ? input2.transactionReference.trim() : "";
+      if (transactionReference.length < 3 || transactionReference.length > 100) {
+        throw httpError(400, "Enter a payment reference between 3 and 100 characters.");
+      }
+      const existingEnrollment = await env.DB.prepare(
+        "SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?"
+      ).bind(user2.id, courseId).first();
+      if (existingEnrollment) {
+        return jsonResponse(200, { enrolled: true, alreadyEnrolled: true });
+      }
+      await env.DB.prepare(`
+        INSERT INTO course_payment_requests (user_id, course_id, transaction_reference, status, created_at)
+        SELECT ?, ?, ?, 'pending', ?
+        WHERE NOT EXISTS (
+          SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?
+        )
+        ON CONFLICT DO NOTHING
+      `).bind(user2.id, courseId, transactionReference, Date.now(), user2.id, courseId).run();
+      const approvedEnrollment = await env.DB.prepare(
+        "SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?"
+      ).bind(user2.id, courseId).first();
+      if (approvedEnrollment) {
+        return jsonResponse(200, { enrolled: true, alreadyEnrolled: true });
+      }
+      const paymentRequest = await env.DB.prepare(`
+        SELECT id FROM course_payment_requests
+        WHERE user_id = ? AND course_id = ? AND status = 'pending'
+      `).bind(user2.id, courseId).first();
+      return jsonResponse(201, { enrolled: false, paymentPending: true, requestId: paymentRequest.id });
+    }
+    await env.DB.prepare("DELETE FROM course_enrollments WHERE user_id = ? AND course_id = ?").bind(user2.id, courseId).run();
+    return jsonResponse(200, { enrolled: false });
+  }
+  if (isLogout) {
+    const token2 = getCookie(request, SESSION_COOKIE);
+    if (token2 && /^[\w-]{40,50}$/.test(token2)) {
+      await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256(token2)).run();
+    }
+    return jsonResponse(200, { ok: true }, { "Set-Cookie": sessionCookie("", 0) });
+  }
+  const input = await readJson(request);
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError(400, "Request body must be a JSON object.");
+  if (isContact) {
+    const name = getName(input.name, "name");
+    const email = normalizeEmail(input.email);
+    if (typeof input.message !== "string") throw httpError(400, "Enter a message.");
+    const message = input.message.trim();
+    if (message.length < 10 || message.length > 5e3) throw httpError(400, "Message must be between 10 and 5000 characters.");
+    await env.DB.prepare("INSERT INTO contact_messages (name, email, message, created_at) VALUES (?, ?, ?, ?)").bind(name, email, message, Date.now()).run();
+    return jsonResponse(201, { ok: true, message: "Your message has been received. Thank you for getting in touch." });
+  }
+  if (isPasswordResetRequest) {
+    const identifier2 = normalizeIdentifier(input.identifier);
+    const channel = getRecoveryChannel(identifier2);
+    try {
+      assertRecoveryConfiguration(channel, env);
+    } catch {
+      throw httpError(503, "Password recovery is not configured for this contact method. Please contact support.");
+    }
+    const user2 = await env.DB.prepare("SELECT id FROM users WHERE identifier = ?").bind(identifier2).first();
+    if (user2) {
+      const now = Date.now();
+      const code = createRecoveryCode();
+      const codeHash = await hashRecoveryCode(env.PASSWORD_RESET_SECRET, user2.id, code);
+      const issued = await env.DB.prepare(`
+        INSERT INTO password_reset_codes (user_id, code_hash, expires_at, attempts, requested_at)
+        VALUES (?, ?, ?, 0, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          code_hash = excluded.code_hash,
+          expires_at = excluded.expires_at,
+          attempts = 0,
+          requested_at = excluded.requested_at
+        WHERE password_reset_codes.requested_at <= ?
+      `).bind(user2.id, codeHash, now + PASSWORD_RESET_CODE_TTL_MS, now, now - PASSWORD_RESET_RESEND_DELAY_MS).run();
+      if (issued.meta.changes === 1) {
+        try {
+          await deliverRecoveryCode(channel, identifier2, code, env);
+        } catch (error) {
+          await env.DB.prepare("DELETE FROM password_reset_codes WHERE user_id = ? AND code_hash = ?").bind(user2.id, codeHash).run();
+          console.error("Password reset code delivery failed.", error);
+          throw httpError(502, "We could not send a verification code. Please try again later.");
+        }
+      }
+    }
+    return jsonResponse(202, {
+      ok: true,
+      message: "If an account matches those details, a verification code has been sent."
+    });
+  }
+  if (isPasswordResetVerify) {
+    const identifier2 = normalizeIdentifier(input.identifier);
+    try {
+      assertResetSecret(env.PASSWORD_RESET_SECRET);
+    } catch {
+      throw httpError(503, "Password recovery is not configured. Please contact support.");
+    }
+    if (typeof input.code !== "string" || !/^\d{6}$/.test(input.code)) {
+      throw httpError(400, "Enter the 6-digit verification code.");
+    }
+    validatePassword(input.newPassword);
+    const user2 = await env.DB.prepare("SELECT id FROM users WHERE identifier = ?").bind(identifier2).first();
+    if (!user2) throw httpError(400, "The verification code is invalid or expired.");
+    const record = await env.DB.prepare(`
+      SELECT code_hash, expires_at, attempts
+      FROM password_reset_codes WHERE user_id = ?
+    `).bind(user2.id).first();
+    const now = Date.now();
+    if (!record || record.expires_at <= now || record.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+      await env.DB.prepare("DELETE FROM password_reset_codes WHERE user_id = ?").bind(user2.id).run();
+      throw httpError(400, "The verification code is invalid or expired.");
+    }
+    const submittedHash = await hashRecoveryCode(env.PASSWORD_RESET_SECRET, user2.id, input.code);
+    if (!constantTimeEqual(submittedHash, record.code_hash)) {
+      await env.DB.prepare(`
+        UPDATE password_reset_codes SET attempts = attempts + 1
+        WHERE user_id = ? AND attempts < ?
+      `).bind(user2.id, PASSWORD_RESET_MAX_ATTEMPTS).run();
+      throw httpError(400, "The verification code is invalid or expired.");
+    }
+    const credentials = await hashPassword(input.newPassword);
+    const recoveryCondition = `
+      EXISTS (
+        SELECT 1 FROM password_reset_codes
+        WHERE user_id = ? AND code_hash = ? AND expires_at > ? AND attempts < ?
+      )
+    `;
+    const results = await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE users SET password_salt = ?, password_hash = ?
+        WHERE id = ? AND ${recoveryCondition}
+      `).bind(credentials.salt, credentials.hash, user2.id, user2.id, record.code_hash, now, PASSWORD_RESET_MAX_ATTEMPTS),
+      env.DB.prepare(`
+        DELETE FROM password_reset_codes
+        WHERE user_id = ? AND code_hash = ? AND expires_at > ? AND attempts < ?
+      `).bind(user2.id, record.code_hash, now, PASSWORD_RESET_MAX_ATTEMPTS),
+      env.DB.prepare(`
+        DELETE FROM sessions
+        WHERE user_id = ? AND EXISTS (
+          SELECT 1 FROM users WHERE id = ? AND password_salt = ? AND password_hash = ?
+        )
+      `).bind(user2.id, user2.id, credentials.salt, credentials.hash)
+    ]);
+    if (results[0].meta.changes !== 1) {
+      throw httpError(400, "The verification code is invalid or expired.");
+    }
+    return jsonResponse(200, { ok: true, message: "Your password has been reset. Sign in with your new password." });
+  }
+  if (isAccountUpdate || isPasswordChange) {
+    const user2 = await findUser(request, env);
+    if (!user2) return errorResponse(401, "Not signed in.");
+    validatePassword(input.currentPassword);
+    const credentials = await env.DB.prepare("SELECT password_salt, password_hash FROM users WHERE id = ?").bind(user2.id).first();
+    if (!await passwordMatches(input.currentPassword, credentials.password_salt, credentials.password_hash)) {
+      return errorResponse(403, "Current password is incorrect.");
+    }
+    if (isAccountUpdate) {
+      const firstName = getName(input.firstName, "first name");
+      const lastName = getName(input.lastName, "last name");
+      const identifier2 = normalizeIdentifier(input.identifier);
+      try {
+        await env.DB.prepare("UPDATE users SET first_name = ?, last_name = ?, identifier = ? WHERE id = ?").bind(firstName, lastName, identifier2, user2.id).run();
+      } catch (error) {
+        if (/UNIQUE constraint failed/i.test(error.message)) throw httpError(409, "An account with that email or phone already exists.");
+        throw error;
+      }
+      return jsonResponse(200, { ok: true, user: { id: user2.id, first_name: firstName, last_name: lastName, identifier: identifier2 } });
+    }
+    validatePassword(input.newPassword);
+    if (input.currentPassword === input.newPassword) throw httpError(400, "Choose a new password that differs from your current one.");
+    const replacement = await hashPassword(input.newPassword);
+    await env.DB.prepare("UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?").bind(replacement.salt, replacement.hash, user2.id).run();
+    await env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(user2.id).run();
+    const token2 = await createSession(env, user2.id);
+    return jsonResponse(200, { ok: true }, { "Set-Cookie": sessionCookie(token2) });
+  }
+  const identifier = normalizeIdentifier(input.identifier);
+  validatePassword(input.password);
+  if (isRegister) {
+    const firstName = getName(input.firstName, "first name");
+    const lastName = getName(input.lastName, "last name");
+    const credentials = await hashPassword(input.password);
+    let result;
+    try {
+      result = await env.DB.prepare(`
+        INSERT INTO users (first_name, last_name, identifier, password_salt, password_hash, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(firstName, lastName, identifier, credentials.salt, credentials.hash, Date.now()).run();
+    } catch (error) {
+      if (/UNIQUE constraint failed/i.test(error.message)) throw httpError(409, "An account with that email or phone already exists.");
+      throw error;
+    }
+    const token2 = await createSession(env, result.meta.last_row_id);
+    return jsonResponse(201, { ok: true }, { "Set-Cookie": sessionCookie(token2) });
+  }
+  const user = await env.DB.prepare("SELECT id, password_salt, password_hash FROM users WHERE identifier = ?").bind(identifier).first();
+  const dummy = { salt: "AAAAAAAAAAAAAAAAAAAAAA", hash: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" };
+  const matches = await passwordMatches(
+    input.password,
+    (user || dummy).password_salt || (user || dummy).salt,
+    (user || dummy).password_hash || (user || dummy).hash
+  );
+  if (!user || !matches) return errorResponse(401, "Invalid email/phone number or password.");
+  const token = await createSession(env, user.id);
+  return jsonResponse(200, { ok: true }, { "Set-Cookie": sessionCookie(token) });
+}
+__name(api, "api");
+async function onRequest(context) {
+  const { request, env } = context;
+  try {
+    const url = new URL(request.url);
+    return await api(request, env, url);
+  } catch (error) {
+    return errorResponse(error.status || 500, error.status ? error.message : "An unexpected server error occurred.");
+  }
+}
+__name(onRequest, "onRequest");
+
+// health.js
+function onRequestGet() {
+  return Response.json({ status: "ok" }, { headers: { "Cache-Control": "no-store" } });
+}
+__name(onRequestGet, "onRequestGet");
+
+// ../.wrangler/tmp/pages-IJ4IsX/functionsRoutes-0.913472843023843.mjs
+var routes = [
+  {
+    routePath: "/api/:path*",
+    mountPath: "/api",
+    method: "",
+    middlewares: [],
+    modules: [onRequest]
+  },
+  {
+    routePath: "/health",
+    mountPath: "/",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet]
+  }
+];
+
+// ../node_modules/path-to-regexp/dist.es2015/index.js
+function lexer(str) {
+  var tokens = [];
+  var i = 0;
+  while (i < str.length) {
+    var char = str[i];
+    if (char === "*" || char === "+" || char === "?") {
+      tokens.push({ type: "MODIFIER", index: i, value: str[i++] });
+      continue;
+    }
+    if (char === "\\") {
+      tokens.push({ type: "ESCAPED_CHAR", index: i++, value: str[i++] });
+      continue;
+    }
+    if (char === "{") {
+      tokens.push({ type: "OPEN", index: i, value: str[i++] });
+      continue;
+    }
+    if (char === "}") {
+      tokens.push({ type: "CLOSE", index: i, value: str[i++] });
+      continue;
+    }
+    if (char === ":") {
+      var name = "";
+      var j = i + 1;
+      while (j < str.length) {
+        var code = str.charCodeAt(j);
+        if (
+          // `0-9`
+          code >= 48 && code <= 57 || // `A-Z`
+          code >= 65 && code <= 90 || // `a-z`
+          code >= 97 && code <= 122 || // `_`
+          code === 95
+        ) {
+          name += str[j++];
+          continue;
+        }
+        break;
+      }
+      if (!name)
+        throw new TypeError("Missing parameter name at ".concat(i));
+      tokens.push({ type: "NAME", index: i, value: name });
+      i = j;
+      continue;
+    }
+    if (char === "(") {
+      var count = 1;
+      var pattern = "";
+      var j = i + 1;
+      if (str[j] === "?") {
+        throw new TypeError('Pattern cannot start with "?" at '.concat(j));
+      }
+      while (j < str.length) {
+        if (str[j] === "\\") {
+          pattern += str[j++] + str[j++];
+          continue;
+        }
+        if (str[j] === ")") {
+          count--;
+          if (count === 0) {
+            j++;
+            break;
+          }
+        } else if (str[j] === "(") {
+          count++;
+          if (str[j + 1] !== "?") {
+            throw new TypeError("Capturing groups are not allowed at ".concat(j));
+          }
+        }
+        pattern += str[j++];
+      }
+      if (count)
+        throw new TypeError("Unbalanced pattern at ".concat(i));
+      if (!pattern)
+        throw new TypeError("Missing pattern at ".concat(i));
+      tokens.push({ type: "PATTERN", index: i, value: pattern });
+      i = j;
+      continue;
+    }
+    tokens.push({ type: "CHAR", index: i, value: str[i++] });
+  }
+  tokens.push({ type: "END", index: i, value: "" });
+  return tokens;
+}
+__name(lexer, "lexer");
+function parse(str, options) {
+  if (options === void 0) {
+    options = {};
+  }
+  var tokens = lexer(str);
+  var _a = options.prefixes, prefixes = _a === void 0 ? "./" : _a, _b = options.delimiter, delimiter = _b === void 0 ? "/#?" : _b;
+  var result = [];
+  var key = 0;
+  var i = 0;
+  var path = "";
+  var tryConsume = /* @__PURE__ */ __name(function(type) {
+    if (i < tokens.length && tokens[i].type === type)
+      return tokens[i++].value;
+  }, "tryConsume");
+  var mustConsume = /* @__PURE__ */ __name(function(type) {
+    var value2 = tryConsume(type);
+    if (value2 !== void 0)
+      return value2;
+    var _a2 = tokens[i], nextType = _a2.type, index = _a2.index;
+    throw new TypeError("Unexpected ".concat(nextType, " at ").concat(index, ", expected ").concat(type));
+  }, "mustConsume");
+  var consumeText = /* @__PURE__ */ __name(function() {
+    var result2 = "";
+    var value2;
+    while (value2 = tryConsume("CHAR") || tryConsume("ESCAPED_CHAR")) {
+      result2 += value2;
+    }
+    return result2;
+  }, "consumeText");
+  var isSafe = /* @__PURE__ */ __name(function(value2) {
+    for (var _i = 0, delimiter_1 = delimiter; _i < delimiter_1.length; _i++) {
+      var char2 = delimiter_1[_i];
+      if (value2.indexOf(char2) > -1)
+        return true;
+    }
+    return false;
+  }, "isSafe");
+  var safePattern = /* @__PURE__ */ __name(function(prefix2) {
+    var prev = result[result.length - 1];
+    var prevText = prefix2 || (prev && typeof prev === "string" ? prev : "");
+    if (prev && !prevText) {
+      throw new TypeError('Must have text between two parameters, missing text after "'.concat(prev.name, '"'));
+    }
+    if (!prevText || isSafe(prevText))
+      return "[^".concat(escapeString(delimiter), "]+?");
+    return "(?:(?!".concat(escapeString(prevText), ")[^").concat(escapeString(delimiter), "])+?");
+  }, "safePattern");
+  while (i < tokens.length) {
+    var char = tryConsume("CHAR");
+    var name = tryConsume("NAME");
+    var pattern = tryConsume("PATTERN");
+    if (name || pattern) {
+      var prefix = char || "";
+      if (prefixes.indexOf(prefix) === -1) {
+        path += prefix;
+        prefix = "";
+      }
+      if (path) {
+        result.push(path);
+        path = "";
+      }
+      result.push({
+        name: name || key++,
+        prefix,
+        suffix: "",
+        pattern: pattern || safePattern(prefix),
+        modifier: tryConsume("MODIFIER") || ""
+      });
+      continue;
+    }
+    var value = char || tryConsume("ESCAPED_CHAR");
+    if (value) {
+      path += value;
+      continue;
+    }
+    if (path) {
+      result.push(path);
+      path = "";
+    }
+    var open = tryConsume("OPEN");
+    if (open) {
+      var prefix = consumeText();
+      var name_1 = tryConsume("NAME") || "";
+      var pattern_1 = tryConsume("PATTERN") || "";
+      var suffix = consumeText();
+      mustConsume("CLOSE");
+      result.push({
+        name: name_1 || (pattern_1 ? key++ : ""),
+        pattern: name_1 && !pattern_1 ? safePattern(prefix) : pattern_1,
+        prefix,
+        suffix,
+        modifier: tryConsume("MODIFIER") || ""
+      });
+      continue;
+    }
+    mustConsume("END");
+  }
+  return result;
+}
+__name(parse, "parse");
+function match(str, options) {
+  var keys = [];
+  var re = pathToRegexp(str, keys, options);
+  return regexpToFunction(re, keys, options);
+}
+__name(match, "match");
+function regexpToFunction(re, keys, options) {
+  if (options === void 0) {
+    options = {};
+  }
+  var _a = options.decode, decode = _a === void 0 ? function(x) {
+    return x;
+  } : _a;
+  return function(pathname) {
+    var m = re.exec(pathname);
+    if (!m)
+      return false;
+    var path = m[0], index = m.index;
+    var params = /* @__PURE__ */ Object.create(null);
+    var _loop_1 = /* @__PURE__ */ __name(function(i2) {
+      if (m[i2] === void 0)
+        return "continue";
+      var key = keys[i2 - 1];
+      if (key.modifier === "*" || key.modifier === "+") {
+        params[key.name] = m[i2].split(key.prefix + key.suffix).map(function(value) {
+          return decode(value, key);
+        });
+      } else {
+        params[key.name] = decode(m[i2], key);
+      }
+    }, "_loop_1");
+    for (var i = 1; i < m.length; i++) {
+      _loop_1(i);
+    }
+    return { path, index, params };
+  };
+}
+__name(regexpToFunction, "regexpToFunction");
+function escapeString(str) {
+  return str.replace(/([.+*?=^!:${}()[\]|/\\])/g, "\\$1");
+}
+__name(escapeString, "escapeString");
+function flags(options) {
+  return options && options.sensitive ? "" : "i";
+}
+__name(flags, "flags");
+function regexpToRegexp(path, keys) {
+  if (!keys)
+    return path;
+  var groupsRegex = /\((?:\?<(.*?)>)?(?!\?)/g;
+  var index = 0;
+  var execResult = groupsRegex.exec(path.source);
+  while (execResult) {
+    keys.push({
+      // Use parenthesized substring match if available, index otherwise
+      name: execResult[1] || index++,
+      prefix: "",
+      suffix: "",
+      modifier: "",
+      pattern: ""
+    });
+    execResult = groupsRegex.exec(path.source);
+  }
+  return path;
+}
+__name(regexpToRegexp, "regexpToRegexp");
+function arrayToRegexp(paths, keys, options) {
+  var parts = paths.map(function(path) {
+    return pathToRegexp(path, keys, options).source;
+  });
+  return new RegExp("(?:".concat(parts.join("|"), ")"), flags(options));
+}
+__name(arrayToRegexp, "arrayToRegexp");
+function stringToRegexp(path, keys, options) {
+  return tokensToRegexp(parse(path, options), keys, options);
+}
+__name(stringToRegexp, "stringToRegexp");
+function tokensToRegexp(tokens, keys, options) {
+  if (options === void 0) {
+    options = {};
+  }
+  var _a = options.strict, strict = _a === void 0 ? false : _a, _b = options.start, start = _b === void 0 ? true : _b, _c = options.end, end = _c === void 0 ? true : _c, _d = options.encode, encode = _d === void 0 ? function(x) {
+    return x;
+  } : _d, _e = options.delimiter, delimiter = _e === void 0 ? "/#?" : _e, _f = options.endsWith, endsWith = _f === void 0 ? "" : _f;
+  var endsWithRe = "[".concat(escapeString(endsWith), "]|$");
+  var delimiterRe = "[".concat(escapeString(delimiter), "]");
+  var route = start ? "^" : "";
+  for (var _i = 0, tokens_1 = tokens; _i < tokens_1.length; _i++) {
+    var token = tokens_1[_i];
+    if (typeof token === "string") {
+      route += escapeString(encode(token));
+    } else {
+      var prefix = escapeString(encode(token.prefix));
+      var suffix = escapeString(encode(token.suffix));
+      if (token.pattern) {
+        if (keys)
+          keys.push(token);
+        if (prefix || suffix) {
+          if (token.modifier === "+" || token.modifier === "*") {
+            var mod = token.modifier === "*" ? "?" : "";
+            route += "(?:".concat(prefix, "((?:").concat(token.pattern, ")(?:").concat(suffix).concat(prefix, "(?:").concat(token.pattern, "))*)").concat(suffix, ")").concat(mod);
+          } else {
+            route += "(?:".concat(prefix, "(").concat(token.pattern, ")").concat(suffix, ")").concat(token.modifier);
+          }
+        } else {
+          if (token.modifier === "+" || token.modifier === "*") {
+            throw new TypeError('Can not repeat "'.concat(token.name, '" without a prefix and suffix'));
+          }
+          route += "(".concat(token.pattern, ")").concat(token.modifier);
+        }
+      } else {
+        route += "(?:".concat(prefix).concat(suffix, ")").concat(token.modifier);
+      }
+    }
+  }
+  if (end) {
+    if (!strict)
+      route += "".concat(delimiterRe, "?");
+    route += !options.endsWith ? "$" : "(?=".concat(endsWithRe, ")");
+  } else {
+    var endToken = tokens[tokens.length - 1];
+    var isEndDelimited = typeof endToken === "string" ? delimiterRe.indexOf(endToken[endToken.length - 1]) > -1 : endToken === void 0;
+    if (!strict) {
+      route += "(?:".concat(delimiterRe, "(?=").concat(endsWithRe, "))?");
+    }
+    if (!isEndDelimited) {
+      route += "(?=".concat(delimiterRe, "|").concat(endsWithRe, ")");
+    }
+  }
+  return new RegExp(route, flags(options));
+}
+__name(tokensToRegexp, "tokensToRegexp");
+function pathToRegexp(path, keys, options) {
+  if (path instanceof RegExp)
+    return regexpToRegexp(path, keys);
+  if (Array.isArray(path))
+    return arrayToRegexp(path, keys, options);
+  return stringToRegexp(path, keys, options);
+}
+__name(pathToRegexp, "pathToRegexp");
+
+// ../node_modules/wrangler/templates/pages-template-worker.ts
+var escapeRegex = /[.+?^${}()|[\]\\]/g;
+function* executeRequest(request) {
+  const requestPath = new URL(request.url).pathname;
+  for (const route of [...routes].reverse()) {
+    if (route.method && route.method !== request.method) {
+      continue;
+    }
+    const routeMatcher = match(route.routePath.replace(escapeRegex, "\\$&"), {
+      end: false
+    });
+    const mountMatcher = match(route.mountPath.replace(escapeRegex, "\\$&"), {
+      end: false
+    });
+    const matchResult = routeMatcher(requestPath);
+    const mountMatchResult = mountMatcher(requestPath);
+    if (matchResult && mountMatchResult) {
+      for (const handler of route.middlewares.flat()) {
+        yield {
+          handler,
+          params: matchResult.params,
+          path: mountMatchResult.path
+        };
+      }
+    }
+  }
+  for (const route of routes) {
+    if (route.method && route.method !== request.method) {
+      continue;
+    }
+    const routeMatcher = match(route.routePath.replace(escapeRegex, "\\$&"), {
+      end: true
+    });
+    const mountMatcher = match(route.mountPath.replace(escapeRegex, "\\$&"), {
+      end: false
+    });
+    const matchResult = routeMatcher(requestPath);
+    const mountMatchResult = mountMatcher(requestPath);
+    if (matchResult && mountMatchResult && route.modules.length) {
+      for (const handler of route.modules.flat()) {
+        yield {
+          handler,
+          params: matchResult.params,
+          path: matchResult.path
+        };
+      }
+      break;
+    }
+  }
+}
+__name(executeRequest, "executeRequest");
+var pages_template_worker_default = {
+  async fetch(originalRequest, env, workerContext) {
+    let request = originalRequest;
+    const handlerIterator = executeRequest(request);
+    let data = {};
+    let isFailOpen = false;
+    const next = /* @__PURE__ */ __name(async (input, init) => {
+      if (input !== void 0) {
+        let url = input;
+        if (typeof input === "string") {
+          url = new URL(input, request.url).toString();
+        }
+        request = new Request(url, init);
+      }
+      const result = handlerIterator.next();
+      if (result.done === false) {
+        const { handler, params, path } = result.value;
+        const context = {
+          request: new Request(request.clone()),
+          functionPath: path,
+          next,
+          params,
+          get data() {
+            return data;
+          },
+          set data(value) {
+            if (typeof value !== "object" || value === null) {
+              throw new Error("context.data must be an object");
+            }
+            data = value;
+          },
+          env,
+          waitUntil: workerContext.waitUntil.bind(workerContext),
+          passThroughOnException: /* @__PURE__ */ __name(() => {
+            isFailOpen = true;
+          }, "passThroughOnException")
+        };
+        const response = await handler(context);
+        if (!(response instanceof Response)) {
+          throw new Error("Your Pages function should return a Response");
+        }
+        return cloneResponse(response);
+      } else if ("ASSETS") {
+        const response = await env["ASSETS"].fetch(request);
+        return cloneResponse(response);
+      } else {
+        const response = await fetch(request);
+        return cloneResponse(response);
+      }
+    }, "next");
+    try {
+      return await next();
+    } catch (error) {
+      if (isFailOpen) {
+        const response = await env["ASSETS"].fetch(request);
+        return cloneResponse(response);
+      }
+      throw error;
+    }
+  }
+};
+var cloneResponse = /* @__PURE__ */ __name((response) => (
+  // https://fetch.spec.whatwg.org/#null-body-status
+  new Response(
+    [101, 204, 205, 304].includes(response.status) ? null : response.body,
+    response
+  )
+), "cloneResponse");
+export {
+  pages_template_worker_default as default
+};
+
+------formdata-undici-091906377409--

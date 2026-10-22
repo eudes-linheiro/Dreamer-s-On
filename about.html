@@ -18,18 +18,16 @@
         </a>
       </div>
 
-      <nav class="navlinks" aria-label="Main navigation">
+      <nav class="navlinks" id="main-navigation" aria-label="Main navigation">
+        <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="main-navigation" data-menu-toggle>
+          <span></span><span></span><span></span>
+        </button>
         <a href="index.html">Home</a>
         <a href="about.html" aria-current="page">About</a>
-        <a href="education.html">Education</a>
-        <a href="arts.html">Arts</a>
-        <a href="technology.html">Technology</a>
-        <a href="sports.html">Sports</a>
         <a href="contact.html">Contact</a>
-        <a href="login.html">Login</a>
-        <a href="signup.html" class="nav-join">Sign up</a>
-        <a href="profile.html">Profile</a>
-        <a href="account.html">Account</a>
+        <a href="profile.html" class="nav-profile-link" aria-label="Your profile" title="Your profile">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" /></svg>
+        </a>
       </nav>
     </header>
 
@@ -97,6 +95,10 @@
 
     <footer class="footer" id="contact">
       <p>&copy; 2026 Dreamer's On. All rights reserved.</p>
+      <nav class="legal-links" aria-label="Legal">
+        <a href="terms.html">Terms of Use</a>
+        <a href="privacy.html">Privacy Policy</a>
+      </nav>
       <div class="social-links">
         <a href="https://www.facebook.com/profile.php?id=61595445001055" target="_blank" rel="noopener" aria-label="Facebook"><i class="fa-brands fa-facebook"></i></a>
         <a href="https://instagram.com/dreamers_onn" target="_blank" rel="noopener" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
@@ -105,5 +107,6 @@
         <a href="https://www.linkedin.com/company/dreamer’s-on" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
       </div>
     </footer>
+    <script src="js/navigation.js" defer></script>
   </body>
 </html>

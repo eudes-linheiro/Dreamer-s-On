@@ -11,6 +11,7 @@ const {
 const { DatabaseSync } = require('node:sqlite');
 
 const scryptAsync = promisify(scrypt);
+const passwordRecovery = import('./functions/_shared/password-recovery.mjs');
 const ROOT = __dirname;
 const SESSION_COOKIE = 'dreamers_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -22,6 +23,7 @@ const PUBLIC_PAGES = new Set([
   'about.html',
   'account.html',
   'contact.html',
+  'course-payments.html',
   'education.html',
   'forgotpassword.html',
   'login.html',
@@ -30,6 +32,8 @@ const PUBLIC_PAGES = new Set([
   'arts.html',
   'sports.html',
   'technology.html',
+  'terms.html',
+  'privacy.html',
 ]);
 const PUBLIC_DIRECTORIES = ['css', 'font-awesome', 'img-asset', 'js'];
 const COURSES = [
@@ -221,6 +225,8 @@ function isPublicFile(relativePath) {
 function createAuthServer({
   databasePath = process.env.AUTH_DB_PATH || path.join(ROOT, 'data', 'auth.sqlite'),
   secureCookies = process.env.NODE_ENV === 'production',
+  environment = process.env,
+  sendRecoveryCode,
 } = {}) {
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   const database = new DatabaseSync(databasePath);
@@ -244,6 +250,13 @@ function createAuthServer({
       expires_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+    CREATE TABLE IF NOT EXISTS password_reset_codes (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 5),
+      requested_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS contact_messages (
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
@@ -251,13 +264,37 @@ function createAuthServer({
       message TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS courses (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS course_enrollments (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      course_id TEXT NOT NULL,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
       enrolled_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, course_id)
     );
+    CREATE TABLE IF NOT EXISTS course_payment_requests (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      transaction_reference TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+      created_at INTEGER NOT NULL,
+      reviewed_at INTEGER,
+      reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS one_pending_course_payment
+      ON course_payment_requests (user_id, course_id)
+      WHERE status = 'pending';
+    CREATE INDEX IF NOT EXISTS course_payment_requests_status_created
+      ON course_payment_requests (status, created_at);
   `);
+  const insertCourse = database.prepare(
+    'INSERT INTO courses (id, title, category) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING',
+  );
+  COURSES.forEach((course) => insertCourse.run(course.id, course.title, course.category));
   const userColumns = new Set(database.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
   if (!userColumns.has('photo_data')) {
     database.exec('ALTER TABLE users ADD COLUMN photo_data BLOB');
@@ -321,19 +358,29 @@ function createAuthServer({
     const isCurrentUser = route === '/api/auth/me';
     const isAccountUpdate = route === '/api/auth/account';
     const isPasswordChange = route === '/api/auth/password';
+    const isPasswordResetRequest = route === '/api/auth/password-reset/request';
+    const isPasswordResetVerify = route === '/api/auth/password-reset/verify';
     const isContact = route === '/api/contact';
     const isCourseCatalog = route === '/api/courses';
     const isCourseEnrollments = route === '/api/courses/enrollments';
+    const isCoursePaymentDetails = route === '/api/courses/payment-details';
+    const isAdminCoursePayments = route === '/api/admin/course-payments';
+    const adminCoursePaymentRoute = route.match(/^\/api\/admin\/course-payments\/(\d+)$/);
     const isProfilePhoto = route === '/api/auth/photo';
     const enrollmentRoute = route.match(/^\/api\/courses\/([a-z0-9-]+)\/enrollment$/);
 
-    if (![isRegister, isLogin, isLogout, isCurrentUser, isAccountUpdate, isPasswordChange, isContact, isCourseCatalog, isCourseEnrollments, isProfilePhoto].some(Boolean) && !enrollmentRoute) {
+    if (![isRegister, isLogin, isLogout, isCurrentUser, isAccountUpdate, isPasswordChange,
+      isPasswordResetRequest, isPasswordResetVerify, isContact, isCourseCatalog,
+      isCourseEnrollments, isCoursePaymentDetails, isAdminCoursePayments,
+      isProfilePhoto].some(Boolean) && !enrollmentRoute && !adminCoursePaymentRoute) {
       sendJson(response, 404, { error: 'Not found.' });
       return;
     }
 
-    const expectedMethod = isCurrentUser || isCourseCatalog || isCourseEnrollments || isProfilePhoto ? 'GET' : 'POST';
-    const allowedMethods = enrollmentRoute || isProfilePhoto ? ['GET', 'POST', 'DELETE'] : [expectedMethod];
+    const expectedMethod = isCurrentUser || isCourseCatalog || isCourseEnrollments
+      || isCoursePaymentDetails || isAdminCoursePayments || isProfilePhoto ? 'GET' : 'POST';
+    const allowedMethods = adminCoursePaymentRoute ? ['POST']
+      : enrollmentRoute || isProfilePhoto ? ['GET', 'POST', 'DELETE'] : [expectedMethod];
     if (!allowedMethods.includes(request.method)) {
       sendJson(response, 405, { error: 'Method not allowed.' }, { Allow: allowedMethods.join(', ') });
       return;
@@ -341,6 +388,88 @@ function createAuthServer({
 
     if (isCourseCatalog) {
       sendJson(response, 200, { courses: COURSES });
+      return;
+    }
+
+    if (isCoursePaymentDetails) {
+      sendJson(response, 200, {
+        fee: 3000,
+        currency: 'AOA',
+        instructions: environment.COURSE_PAYMENT_INSTRUCTIONS || '',
+      });
+      return;
+    }
+
+    if (isAdminCoursePayments || adminCoursePaymentRoute) {
+      const user = findUserForSession(request);
+      if (!user) {
+        sendJson(response, 401, { error: 'Not signed in.' });
+        return;
+      }
+      const adminUserId = Number(environment.COURSE_PAYMENT_ADMIN_USER_ID);
+      if (!Number.isSafeInteger(adminUserId) || adminUserId < 1) {
+        sendJson(response, 503, { error: 'Course payment review is not configured.' });
+        return;
+      }
+      if (user.id !== adminUserId) {
+        sendJson(response, 403, { error: 'You are not authorized to review course payments.' });
+        return;
+      }
+      if (isAdminCoursePayments) {
+        const requests = database.prepare(`
+          SELECT requests.id, requests.transaction_reference AS transactionReference,
+            requests.created_at AS createdAt, users.first_name AS firstName,
+            users.last_name AS lastName, users.identifier, courses.title AS courseTitle
+          FROM course_payment_requests AS requests
+          JOIN users ON users.id = requests.user_id
+          JOIN courses ON courses.id = requests.course_id
+          WHERE requests.status = 'pending'
+          ORDER BY requests.created_at ASC
+        `).all();
+        sendJson(response, 200, { requests });
+        return;
+      }
+
+      const requestId = Number(adminCoursePaymentRoute[1]);
+      if (!Number.isSafeInteger(requestId) || requestId < 1) {
+        sendJson(response, 404, { error: 'Payment request not found.' });
+        return;
+      }
+      const input = await readJson(request);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw httpError(400, 'Request body must be a JSON object.');
+      }
+      if (!['approve', 'reject'].includes(input.action)) {
+        throw httpError(400, 'Choose approve or reject.');
+      }
+
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        const payment = database.prepare(
+          "SELECT user_id, course_id FROM course_payment_requests WHERE id = ? AND status = 'pending'",
+        ).get(requestId);
+        if (!payment) {
+          const exists = database.prepare('SELECT 1 FROM course_payment_requests WHERE id = ?').get(requestId);
+          throw httpError(exists ? 409 : 404, exists ? 'This payment request has already been reviewed.' : 'Payment request not found.');
+        }
+        database.prepare(`
+          UPDATE course_payment_requests
+          SET status = ?, reviewed_at = ?, reviewed_by = ?
+          WHERE id = ? AND status = 'pending'
+        `).run(input.action === 'approve' ? 'approved' : 'rejected', Date.now(), user.id, requestId);
+        if (input.action === 'approve') {
+          database.prepare(`
+            INSERT INTO course_enrollments (user_id, course_id, enrolled_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT (user_id, course_id) DO NOTHING
+          `).run(payment.user_id, payment.course_id, Date.now());
+        }
+        database.exec('COMMIT');
+      } catch (error) {
+        if (database.isTransaction) database.exec('ROLLBACK');
+        throw error;
+      }
+      sendJson(response, 200, { status: input.action === 'approve' ? 'approved' : 'rejected' });
       return;
     }
 
@@ -403,6 +532,14 @@ function createAuthServer({
       sendJson(response, 429, { error: 'Too many attempts. Please try again in a minute.' });
       return;
     }
+    if (isPasswordResetRequest && !allowedByRateLimit(request, 'password-reset-request', 5)) {
+      sendJson(response, 429, { error: 'Too many requests. Wait a minute before trying again.' });
+      return;
+    }
+    if (isPasswordResetVerify && !allowedByRateLimit(request, 'password-reset-verify', 10)) {
+      sendJson(response, 429, { error: 'Too many attempts. Wait a minute before trying again.' });
+      return;
+    }
     if ((isAccountUpdate || isPasswordChange) && !allowedByRateLimit(request, route, 8)) {
       sendJson(response, 429, { error: 'Too many attempts. Please try again in a minute.' });
       return;
@@ -430,11 +567,25 @@ function createAuthServer({
           WHERE user_id = ?
           ORDER BY enrolled_at DESC
         `).all(user.id);
+        const paymentRequests = database.prepare(`
+          SELECT requests.id, requests.course_id AS courseId, courses.title AS courseTitle,
+            requests.status, requests.created_at AS createdAt
+          FROM course_payment_requests AS requests
+          JOIN courses ON courses.id = requests.course_id
+          WHERE requests.user_id = ?
+            AND requests.status IN ('pending', 'rejected')
+            AND requests.id = (
+              SELECT MAX(latest.id) FROM course_payment_requests AS latest
+              WHERE latest.user_id = requests.user_id AND latest.course_id = requests.course_id
+            )
+          ORDER BY requests.created_at DESC
+        `).all(user.id);
         sendJson(response, 200, {
           courses: enrollments.map((enrollment) => ({
             ...COURSES.find((course) => course.id === enrollment.course_id),
             enrolledAt: enrollment.enrolledAt,
           })),
+          paymentRequests,
         });
         return;
       }
@@ -446,19 +597,49 @@ function createAuthServer({
       }
 
       if (request.method === 'POST') {
-        const result = database.prepare(`
-          INSERT INTO course_enrollments (user_id, course_id, enrolled_at)
-          VALUES (?, ?, ?)
-          ON CONFLICT (user_id, course_id) DO NOTHING
-        `).run(user.id, courseId, Date.now());
-        sendJson(response, 200, { enrolled: true, alreadyEnrolled: Number(result.changes) === 0 });
+        if (!String(environment.COURSE_PAYMENT_INSTRUCTIONS || '').trim()) {
+          sendJson(response, 503, { error: 'Course payment instructions are not configured. Please contact support.' });
+          return;
+        }
+        const input = await readJson(request);
+        if (!input || typeof input !== 'object' || Array.isArray(input)) {
+          throw httpError(400, 'Request body must be a JSON object.');
+        }
+        const transactionReference = typeof input.transactionReference === 'string'
+          ? input.transactionReference.trim() : '';
+        if (transactionReference.length < 3 || transactionReference.length > 100) {
+          throw httpError(400, 'Enter a payment reference between 3 and 100 characters.');
+        }
+        if (database.prepare('SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?')
+          .get(user.id, courseId)) {
+          sendJson(response, 200, { enrolled: true, alreadyEnrolled: true });
+          return;
+        }
+        database.prepare(`
+          INSERT INTO course_payment_requests (user_id, course_id, transaction_reference, status, created_at)
+          SELECT ?, ?, ?, 'pending', ?
+          WHERE NOT EXISTS (
+            SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?
+          )
+          ON CONFLICT DO NOTHING
+        `).run(user.id, courseId, transactionReference, Date.now(), user.id, courseId);
+        if (database.prepare('SELECT 1 FROM course_enrollments WHERE user_id = ? AND course_id = ?')
+          .get(user.id, courseId)) {
+          sendJson(response, 200, { enrolled: true, alreadyEnrolled: true });
+          return;
+        }
+        const paymentRequest = database.prepare(`
+          SELECT id FROM course_payment_requests
+          WHERE user_id = ? AND course_id = ? AND status = 'pending'
+        `).get(user.id, courseId);
+        sendJson(response, 201, { enrolled: false, paymentPending: true, requestId: paymentRequest.id });
         return;
       }
 
-      database.prepare(
+      const deletion = database.prepare(
         'DELETE FROM course_enrollments WHERE user_id = ? AND course_id = ?',
       ).run(user.id, courseId);
-      sendJson(response, 200, { enrolled: false });
+      sendJson(response, 200, { enrolled: false, removed: Number(deletion.changes) > 0 });
       return;
     }
 
@@ -501,6 +682,115 @@ function createAuthServer({
       sendJson(response, 201, {
         ok: true,
         message: 'Your message has been received. Thank you for getting in touch.',
+      });
+      return;
+    }
+
+    if (isPasswordResetRequest) {
+      const identifier = normalizeIdentifier(input.identifier);
+      const { assertRecoveryConfiguration, createRecoveryCode, deliverRecoveryCode, getRecoveryChannel, hashRecoveryCode } = await passwordRecovery;
+      const channel = getRecoveryChannel(identifier);
+      try {
+        assertRecoveryConfiguration(channel, environment);
+      } catch {
+        throw httpError(503, 'Password recovery is not configured for this contact method. Please contact support.');
+      }
+
+      const user = database.prepare('SELECT id FROM users WHERE identifier = ?').get(identifier);
+      if (user) {
+        const now = Date.now();
+        const code = createRecoveryCode();
+        const codeHash = await hashRecoveryCode(environment.PASSWORD_RESET_SECRET, user.id, code);
+        const issued = database.prepare(`
+          INSERT INTO password_reset_codes (user_id, code_hash, expires_at, attempts, requested_at)
+          VALUES (?, ?, ?, 0, ?)
+          ON CONFLICT(user_id) DO UPDATE SET
+            code_hash = excluded.code_hash,
+            expires_at = excluded.expires_at,
+            attempts = 0,
+            requested_at = excluded.requested_at
+          WHERE password_reset_codes.requested_at <= ?
+        `).run(user.id, codeHash, now + 10 * 60 * 1000, now, now - 60_000);
+
+        if (Number(issued.changes) === 1) {
+          try {
+            if (sendRecoveryCode) {
+              await sendRecoveryCode(channel, identifier, code);
+            } else {
+              await deliverRecoveryCode(channel, identifier, code, environment);
+            }
+          } catch (error) {
+            database.prepare('DELETE FROM password_reset_codes WHERE user_id = ? AND code_hash = ?')
+              .run(user.id, codeHash);
+            console.error('Password reset code delivery failed.', error);
+            throw httpError(502, 'We could not send a verification code. Please try again later.');
+          }
+        }
+      }
+
+      sendJson(response, 202, {
+        ok: true,
+        message: 'If an account matches those details, a verification code has been sent.',
+      });
+      return;
+    }
+
+    if (isPasswordResetVerify) {
+      const identifier = normalizeIdentifier(input.identifier);
+      const { assertResetSecret } = await passwordRecovery;
+      try {
+        assertResetSecret(environment.PASSWORD_RESET_SECRET);
+      } catch {
+        throw httpError(503, 'Password recovery is not configured. Please contact support.');
+      }
+      if (typeof input.code !== 'string' || !/^\d{6}$/.test(input.code)) {
+        throw httpError(400, 'Enter the 6-digit verification code.');
+      }
+      validatePassword(input.newPassword);
+      const user = database.prepare('SELECT id FROM users WHERE identifier = ?').get(identifier);
+      if (!user) throw httpError(400, 'The verification code is invalid or expired.');
+
+      const record = database.prepare(`
+        SELECT code_hash, expires_at, attempts
+        FROM password_reset_codes WHERE user_id = ?
+      `).get(user.id);
+      const now = Date.now();
+      if (!record || record.expires_at <= now || record.attempts >= 5) {
+        database.prepare('DELETE FROM password_reset_codes WHERE user_id = ?').run(user.id);
+        throw httpError(400, 'The verification code is invalid or expired.');
+      }
+
+      const { constantTimeEqual, hashRecoveryCode } = await passwordRecovery;
+      const submittedHash = await hashRecoveryCode(environment.PASSWORD_RESET_SECRET, user.id, input.code);
+      if (!constantTimeEqual(submittedHash, record.code_hash)) {
+        database.prepare(`
+          UPDATE password_reset_codes SET attempts = attempts + 1
+          WHERE user_id = ? AND attempts < 5
+        `).run(user.id);
+        throw httpError(400, 'The verification code is invalid or expired.');
+      }
+
+      const credentials = await hashPassword(input.newPassword);
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        const consumed = database.prepare(`
+          DELETE FROM password_reset_codes
+          WHERE user_id = ? AND code_hash = ? AND expires_at > ? AND attempts < 5
+        `).run(user.id, record.code_hash, now);
+        if (Number(consumed.changes) !== 1) {
+          throw httpError(400, 'The verification code is invalid or expired.');
+        }
+        database.prepare('UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?')
+          .run(credentials.salt, credentials.hash, user.id);
+        database.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+        database.exec('COMMIT');
+      } catch (error) {
+        if (database.isTransaction) database.exec('ROLLBACK');
+        throw error;
+      }
+      sendJson(response, 200, {
+        ok: true,
+        message: 'Your password has been reset. Sign in with your new password.',
       });
       return;
     }

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Review course registration payments." />
+    <title>Course Payment Review | Dreamer's On</title>
+    <link rel="stylesheet" href="css/css_style.css" />
+    <link rel="stylesheet" href="css/account.css" />
+    <script src="js/course-payment-admin.js" defer></script>
+  </head>
+  <body class="account-page">
+    <header class="navbar">
+      <div class="logo">
+        <a href="index.html" aria-label="Dreamer's On home">
+          <img src="img-asset/brand.png" alt="Dreamer's On logo" />
+        </a>
+      </div>
+      <nav class="navlinks" id="main-navigation" aria-label="Main navigation">
+        <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="main-navigation" data-menu-toggle>
+          <span></span><span></span><span></span>
+        </button>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+        <a href="profile.html" class="nav-profile-link" aria-label="Your profile" title="Your profile">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" /></svg>
+        </a>
+      </nav>
+    </header>
+    <main class="account-main">
+      <a class="account-back" href="account.html">&larr; Back to account</a>
+      <section class="account-heading" aria-labelledby="payment-review-title">
+        <p class="account-eyebrow">ADMINISTRATION</p>
+        <h1 id="payment-review-title">Course payment review</h1>
+        <p>Verify each 3,000 AOA payment before approving course enrollment.</p>
+      </section>
+      <p class="account-course-status" id="payment-review-status" role="status" aria-live="polite">Loading payment requests...</p>
+      <div id="payment-review-list"></div>
+    </main>
+    <footer class="footer account-footer">
+      <p>&copy; 2026 Dreamer's On. All rights reserved.</p>
+      <nav class="legal-links" aria-label="Legal">
+        <a href="terms.html">Terms of Use</a>
+        <a href="privacy.html">Privacy Policy</a>
+      </nav>
+      <a href="contact.html">Get in touch</a>
+    </footer>
+    <script src="js/navigation.js" defer></script>
+  </body>
+</html>

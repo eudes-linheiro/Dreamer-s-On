@@ -16,18 +16,15 @@
           <img src="img-asset/brand.png" alt="Dreamer's On logo" />
         </a>
       </div>
-      <nav class="navlinks" aria-label="Main navigation">
-        <a href="index.html">Home</a>
+      <nav class="navlinks" id="main-navigation" aria-label="Main navigation">
+        <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="main-navigation" data-menu-toggle>
+          <span></span><span></span><span></span>
+        </button>
         <a href="about.html">About</a>
-        <a href="education.html">Education</a>
-        <a href="arts.html">Arts</a>
-        <a href="technology.html">Technology</a>
-        <a href="sports.html">Sports</a>
         <a href="contact.html">Contact</a>
-        <a href="login.html">Login</a>
-        <a href="signup.html">Sign up</a>
-        <a href="profile.html">Profile</a>
-        <a href="account.html" aria-current="page">Account</a>
+        <a href="profile.html" class="nav-profile-link" aria-label="Your profile" title="Your profile">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" /></svg>
+        </a>
       </nav>
     </header>
 
@@ -48,6 +45,7 @@
             <p>Courses you enroll in are saved to your account.</p>
           </div>
           <p class="account-course-status" id="account-course-status" role="status" aria-live="polite">Loading your courses...</p>
+          <p class="account-course-status" id="account-payment-status" role="status" aria-live="polite"></p>
           <ul class="account-course-list" id="account-course-list"></ul>
           <a class="account-course-link" href="education.html#courses">Explore all courses <span aria-hidden="true">&rarr;</span></a>
         </section>
@@ -114,7 +112,12 @@
 
     <footer class="footer account-footer">
       <p>&copy; 2026 Dreamer's On. All rights reserved.</p>
+      <nav class="legal-links" aria-label="Legal">
+        <a href="terms.html">Terms of Use</a>
+        <a href="privacy.html">Privacy Policy</a>
+      </nav>
       <a href="contact.html">Get in touch</a>
     </footer>
+    <script src="js/navigation.js" defer></script>
   </body>
 </html>

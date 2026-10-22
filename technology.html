@@ -11,8 +11,11 @@
   <body class="topic-page topic-technology">
     <header class="navbar">
       <div class="logo"><a href="index.html" aria-label="Dreamer's On home"><img src="img-asset/brand.png" alt="Dreamer's On logo" /></a></div>
-      <nav class="navlinks" aria-label="Main navigation">
-        <a href="index.html">Home</a><a href="about.html">About</a><a href="education.html">Education</a><a href="arts.html">Arts</a><a href="technology.html" aria-current="page">Technology</a><a href="sports.html">Sports</a><a href="contact.html">Contact</a><a href="login.html">Login</a><a href="signup.html" class="topic-join">Sign up</a><a href="profile.html">Profile</a><a href="account.html">Account</a>
+      <nav class="navlinks" id="main-navigation" aria-label="Main navigation">
+        <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="main-navigation" data-menu-toggle>
+          <span></span><span></span><span></span>
+        </button>
+        <a href="about.html">About</a><a href="contact.html">Contact</a><a href="profile.html" class="nav-profile-link" aria-label="Your profile" title="Your profile"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" /></svg></a>
       </nav>
     </header>
 
@@ -54,7 +57,12 @@
       <nav class="topic-switcher" aria-label="Explore the focus areas">
         <a href="education.html">Education</a><a href="technology.html" aria-current="page">Technology</a><a href="arts.html">Arts</a><a href="sports.html">Sports</a>
       </nav>
+      <nav class="legal-links" aria-label="Legal">
+        <a href="terms.html">Terms of Use</a>
+        <a href="privacy.html">Privacy Policy</a>
+      </nav>
       <a class="topic-back" href="index.html">&larr; Back to home</a>
     </footer>
+    <script src="js/navigation.js" defer></script>
   </body>
 </html>

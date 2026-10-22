@@ -12,8 +12,11 @@
   <body class="topic-page topic-education">
     <header class="navbar">
       <div class="logo"><a href="index.html" aria-label="Dreamer's On home"><img src="img-asset/brand.png" alt="Dreamer's On logo" /></a></div>
-      <nav class="navlinks" aria-label="Main navigation">
-        <a href="index.html">Home</a><a href="about.html">About</a><a href="education.html" aria-current="page">Education</a><a href="arts.html">Arts</a><a href="technology.html">Technology</a><a href="sports.html">Sports</a><a href="contact.html">Contact</a><a href="login.html">Login</a><a href="signup.html" class="topic-join">Sign up</a><a href="profile.html">Profile</a><a href="account.html">Account</a>
+      <nav class="navlinks" id="main-navigation" aria-label="Main navigation">
+        <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="main-navigation" data-menu-toggle>
+          <span></span><span></span><span></span>
+        </button>
+        <a href="about.html">About</a><a href="contact.html">Contact</a><a href="profile.html" class="nav-profile-link" aria-label="Your profile" title="Your profile"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" /></svg></a>
       </nav>
     </header>
 
@@ -43,6 +46,7 @@
           <p class="course-kicker">ONLINE LEARNING PATHS</p>
           <h2 id="course-title">Choose what you want to learn.</h2>
           <p>Start with a subject that interests you. Explore the outline, try a practice activity, and keep building at your own pace.</p>
+          <p class="course-payment-note">Registration is 3,000 AOA per course. Enrollment begins after your payment is confirmed.</p>
         </div>
 
         <div class="course-grid">
@@ -118,6 +122,22 @@
             <p class="course-message" data-course-message role="status" aria-live="polite"></p>
           </article>
         </div>
+        <dialog class="course-payment-dialog" id="course-payment-dialog" aria-labelledby="course-payment-title">
+          <form id="course-payment-form">
+            <h2 id="course-payment-title">Pay the course registration fee</h2>
+            <p class="course-payment-fee">Registration fee: <strong>3,000 AOA</strong></p>
+            <p class="course-payment-instructions" id="course-payment-instructions"></p>
+            <label class="course-payment-reference">
+              <span>Payment reference</span>
+              <input name="transactionReference" type="text" minlength="3" maxlength="100" autocomplete="off" required>
+            </label>
+            <p class="course-payment-dialog-message" id="course-payment-dialog-message" role="status" aria-live="polite"></p>
+            <div class="course-payment-dialog-actions">
+              <button type="button" class="course-payment-cancel" data-payment-cancel>Cancel</button>
+              <button type="submit" class="course-payment-submit">Submit for review</button>
+            </div>
+          </form>
+        </dialog>
       </section>
 
       <section class="topic-practices" aria-labelledby="topic-practices-title">
@@ -137,7 +157,12 @@
       <nav class="topic-switcher" aria-label="Explore the focus areas">
         <a href="education.html" aria-current="page">Education</a><a href="technology.html">Technology</a><a href="arts.html">Arts</a><a href="sports.html">Sports</a>
       </nav>
+      <nav class="legal-links" aria-label="Legal">
+        <a href="terms.html">Terms of Use</a>
+        <a href="privacy.html">Privacy Policy</a>
+      </nav>
       <a class="topic-back" href="index.html">&larr; Back to home</a>
     </footer>
+    <script src="js/navigation.js" defer></script>
   </body>
 </html>
