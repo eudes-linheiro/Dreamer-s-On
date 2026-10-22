@@ -3,12 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Dreamer's On is a community that helps dreamers turn ideas into action through education, art, technology, and sports." />
-    <title>About us</title>
+    <meta name="description" content="Meet Dreamer's On, a community for turning big ideas into shared momentum through education, art, technology, and sports." />
+    <meta name="theme-color" content="#123b32" />
+    <title>About Dreamer's On | A Community of Dreamers</title>
     <link rel="stylesheet" href="css/css_style.css" />
+    <link rel="stylesheet" href="css/about.css" />
     <link rel="stylesheet" href="font-awesome/css/all.min.css" />
   </head>
-  <body>
+  <body class="about-page">
     <header class="navbar">
       <div class="logo">
         <a href="index.html" aria-label="Dreamer's On home">
@@ -18,17 +20,78 @@
 
       <nav class="navlinks" aria-label="Main navigation">
         <a href="index.html">Home</a>
-        <a href="login.html">Login</a>
+        <a href="about.html" aria-current="page">About</a>
+        <a href="education.html">Education</a>
+        <a href="arts.html">Arts</a>
+        <a href="technology.html">Technology</a>
+        <a href="sports.html">Sports</a>
         <a href="contact.html">Contact</a>
+        <a href="login.html">Login</a>
+        <a href="signup.html" class="nav-join">Sign up</a>
+        <a href="profile.html">Profile</a>
+        <a href="account.html">Account</a>
       </nav>
     </header>
 
     <main>
-      <section class="mid-section" id="about">
-        <article class="feature-card">
-          <h1 style="font-size: 3rem;"> About us </h1>
-          <h3 style="color: #333;"> We get it because we’ve been there. The long nights, the self-doubt, the stinging disappointments, and the frustration of having a big vision that no one else seems to understand—it’s all part of the journey. But entrepreneurship shouldn’t mean going at it alone. We are here to stand by your side, clear the hurdles, and give you the tools, strategy, and support you need to turn your raw ideas into a thriving, profitable business. Let’s build your dream together. </h3>
-        </article>
+      <section class="about-hero" aria-labelledby="about-title">
+        <img class="about-hero-image" src="img-asset/Ed.jpg" alt="A young learner reading at a desk" fetchpriority="high" />
+        <div class="about-hero-shade" aria-hidden="true"></div>
+        <div class="about-hero-content">
+          <p class="eyebrow">A community for what comes next</p>
+          <h1 id="about-title">Big dreams<br />grow better <em>together.</em></h1>
+          <p class="hero-description">A place to find encouragement, explore what moves you, and turn the things you imagine into things you do.</p>
+          <div class="hero-actions">
+            <a href="signup.html" class="about-button">Find your people <span aria-hidden="true">&rarr;</span></a>
+            <a href="#our-belief" class="hero-text-link">Get to know us</a>
+          </div>
+        </div>
+        <p class="hero-caption">Curiosity is a good place to start.</p>
+      </section>
+
+      <section class="belief-section" id="our-belief" aria-labelledby="belief-title">
+        <div class="belief-label"><span>01</span><span>Why we are here</span></div>
+        <div class="belief-copy">
+          <h2 id="belief-title">You bring the dream.<br /><span>We make room for it.</span></h2>
+          <p>Big ideas can feel lonely before they feel possible. Dreamer's On is built around a simple belief: when people share what they care about, they can encourage each other to keep learning, making, and moving forward.</p>
+          <p>There is no single way to be a dreamer here. Bring a first idea, a growing skill, or just the curiosity to see what might happen next.</p>
+        </div>
+      </section>
+
+      <section class="focus-section" aria-labelledby="focus-title">
+        <div class="section-heading">
+          <p class="eyebrow">Many ways to make a start</p>
+          <h2 id="focus-title">Follow what lights you up.</h2>
+          <p>Explore the things that bring people together at Dreamer's On.</p>
+        </div>
+        <div class="focus-grid">
+          <article class="focus-item focus-education">
+            <img src="img-asset/Ed.jpg" alt="A student reading and learning" loading="lazy" />
+            <div class="focus-copy"><span>01 / Learn</span><h3>Education</h3><p>Keep asking questions. Build skills that help your ideas take shape.</p></div>
+          </article>
+          <article class="focus-item focus-art">
+            <img src="img-asset/Arts.jpg" alt="Colorful materials in an artist's workspace" loading="lazy" />
+            <div class="focus-copy"><span>02 / Make</span><h3>Art</h3><p>Share your point of view and make something that feels like you.</p></div>
+          </article>
+          <article class="focus-item focus-technology">
+            <img src="img-asset/Tech.jpg" alt="A person exploring a virtual reality experience" loading="lazy" />
+            <div class="focus-copy"><span>03 / Explore</span><h3>Technology</h3><p>Discover tools and new ways to connect ideas with people.</p></div>
+          </article>
+          <article class="focus-item focus-sports">
+            <img src="img-asset/Spor.jpg" alt="Players competing on a sports court" loading="lazy" />
+            <div class="focus-copy"><span>04 / Move</span><h3>Sports</h3><p>Find the fun in showing up, playing together, and growing stronger.</p></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="join-section" aria-labelledby="join-title">
+        <p class="eyebrow">Your story belongs here</p>
+        <h2 id="join-title">What would you like to make possible?</h2>
+        <p>Start with a hello. See where it takes you.</p>
+        <div class="join-actions">
+          <a href="signup.html" class="about-button">Join the community <span aria-hidden="true">&rarr;</span></a>
+          <a href="contact.html" class="join-contact">Have a question? Contact us</a>
+        </div>
       </section>
     </main>
 

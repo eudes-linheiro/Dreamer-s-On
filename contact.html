@@ -3,30 +3,42 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact us </title>
+    <title>Contact us</title>
     <link rel="stylesheet" href="css/form.css">
     <link rel="preconnect" href="https://googleapis.com">
     <link rel="preconnect" href="https://gstatic.com" crossorigin>
     <link href="https://googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
+    <nav class="form-nav" aria-label="Main navigation">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="education.html">Education</a>
+      <a href="arts.html">Arts</a>
+      <a href="technology.html">Technology</a>
+      <a href="sports.html">Sports</a>
+      <a href="contact.html" aria-current="page">Contact</a>
+      <a href="login.html">Login</a>
+      <a href="signup.html">Sign up</a>
+      <a href="profile.html">Profile</a>
+      <a href="account.html">Account</a>
+    </nav>
 
     <main class="login-container">
       <div class="login-card">
         <h1 class="title">Get in touch</h1>
-        <p class="subtitle"></p>
-        <form>
+        <p class="subtitle">Send us a note and we will be in touch.</p>
+        <form data-contact-form>
           <div class="input-group">
-            <input type="text" placeholder="Enter your name" required>
-          </div>
-          <div class="input-group">
-            <input type="email" placeholder="Email adress" required>
+            <input type="text" name="name" placeholder="Enter your name" autocomplete="name" maxlength="80" required>
           </div>
           <div class="input-group">
-            <textarea class="input-group" id=“message” name="message" rows="4" cols="50" placeholder="Write your message here..." required></textarea>
+            <input type="email" name="email" placeholder="Email address" autocomplete="email" maxlength="254" required>
           </div>
-          <div class="form-options">
+          <div class="input-group">
+            <textarea id="message" name="message" rows="4" maxlength="5000" placeholder="Write your message here..." required></textarea>
           </div>
+          <p class="form-message" data-contact-message role="status" aria-live="polite"></p>
           <button type="submit" class="btn-primary">Submit</button>
         </form>
         <p class="signup-footer">
@@ -34,6 +46,7 @@
         </p>
       </div>
     </main>
+    <script src="js/contact.js" defer></script>
   </body>
 </html>
 

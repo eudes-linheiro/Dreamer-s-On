@@ -10,23 +10,37 @@
   <link href="https://googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <nav class="form-nav" aria-label="Main navigation">
+    <a href="index.html">Home</a>
+    <a href="about.html">About</a>
+    <a href="education.html">Education</a>
+    <a href="arts.html">Arts</a>
+    <a href="technology.html">Technology</a>
+    <a href="sports.html">Sports</a>
+    <a href="contact.html">Contact</a>
+    <a href="login.html" aria-current="page">Login</a>
+    <a href="signup.html">Sign up</a>
+    <a href="profile.html">Profile</a>
+    <a href="account.html">Account</a>
+  </nav>
 
   <main class="login-container">
     <div class="login-card">
       <p class="subtitle">Please enter your details</p>
       <h1 class="title">Welcome back</h1>
 
-      <form>
+      <form data-auth-form="login">
         <div class="input-group">
-          <input type="email" placeholder="Email adress" required>
+          <input type="text" name="identifier" placeholder="Email or Angola phone (+244)" autocomplete="username" aria-label="Email or Angola phone number" required>
         </div>
         <div class="input-group">
-          <input type="password" placeholder="Password" required>
+          <input type="password" name="password" placeholder="Password" autocomplete="current-password" aria-label="Password" required>
         </div>
 
         <div class="form-options">
-          <a href="forgotpassword.html" class="forgot-link">Forgot password</a>
+          <a href="forgotpassword.html" class="forgot-link">Forgot your password?</a>
         </div>
+        <p class="form-message" data-auth-message role="status" aria-live="polite"></p>
         <button type="submit" class="btn-primary">Login</button>
       </form>
       <p class="signup-footer">
@@ -34,5 +48,6 @@
       </p>
     </div>
   </main>
+  <script src="js/auth.js" defer></script>
 </body>
 </html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="View your Dreamer's On member profile." />
+    <title>Your Profile | Dreamer's On</title>
+    <link rel="stylesheet" href="css/css_style.css" />
+    <link rel="stylesheet" href="css/profile.css" />
+    <link rel="stylesheet" href="font-awesome/css/all.min.css" />
+    <script src="js/profile.js" defer></script>
+  </head>
+  <body class="profile-page">
+    <header class="navbar">
+      <div class="logo">
+        <a href="index.html" aria-label="Dreamer's On home">
+          <img src="img-asset/brand.png" alt="Dreamer's On logo" />
+        </a>
+      </div>
+      <nav class="navlinks" aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="education.html">Education</a>
+        <a href="arts.html">Arts</a>
+        <a href="technology.html">Technology</a>
+        <a href="sports.html">Sports</a>
+        <a href="contact.html">Contact</a>
+        <a href="login.html">Login</a>
+        <a href="signup.html">Sign up</a>
+        <a href="profile.html" aria-current="page">Profile</a>
+        <a href="account.html">Account</a>
+      </nav>
+    </header>
+
+    <main class="profile-main">
+      <section class="profile-heading" aria-labelledby="page-title">
+        <p class="profile-eyebrow">MEMBER SPACE</p>
+        <h1 id="page-title">Your profile</h1>
+        <p>Your Dreamer's On account, all in one place.</p>
+      </section>
+
+      <section class="profile-card" aria-labelledby="account-title" hidden>
+        <div class="profile-banner">
+          <div class="profile-avatar" id="profile-avatar" aria-hidden="true"></div>
+          <div class="profile-identity">
+            <p class="profile-eyebrow">DREAMER'S ON MEMBER</p>
+            <h2 id="profile-name"></h2>
+            <p id="profile-identifier" class="profile-identifier"></p>
+          </div>
+        </div>
+
+        <div class="profile-details">
+          <h2 id="account-title">Account details</h2>
+          <dl>
+            <div>
+              <dt>First name</dt>
+              <dd id="profile-first-name"></dd>
+            </div>
+            <div>
+              <dt>Last name</dt>
+              <dd id="profile-last-name"></dd>
+            </div>
+            <div>
+              <dt>Email or phone</dt>
+              <dd id="profile-contact"></dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="profile-actions">
+          <a class="profile-community-link" href="about.html">Explore the community <span aria-hidden="true">&rarr;</span></a>
+          <a class="profile-community-link" href="account.html">Manage account <span aria-hidden="true">&rarr;</span></a>
+          <button class="profile-signout" id="signout-button" type="button">
+            <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+            <span>Sign out</span>
+          </button>
+        </div>
+      </section>
+
+      <p class="profile-status" id="profile-status" role="status" aria-live="polite">Loading your profile...</p>
+    </main>
+
+    <footer class="footer">
+      <p>&copy; 2026 Dreamer's On. All rights reserved.</p>
+      <a href="contact.html">Get in touch</a>
+    </footer>
+  </body>
+</html>

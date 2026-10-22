@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Manage your Dreamer's On account details and password." />
+    <title>Manage Account | Dreamer's On</title>
+    <link rel="stylesheet" href="css/css_style.css" />
+    <link rel="stylesheet" href="css/account.css" />
+    <script src="js/account.js" defer></script>
+  </head>
+  <body class="account-page">
+    <header class="navbar">
+      <div class="logo">
+        <a href="index.html" aria-label="Dreamer's On home">
+          <img src="img-asset/brand.png" alt="Dreamer's On logo" />
+        </a>
+      </div>
+      <nav class="navlinks" aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="education.html">Education</a>
+        <a href="arts.html">Arts</a>
+        <a href="technology.html">Technology</a>
+        <a href="sports.html">Sports</a>
+        <a href="contact.html">Contact</a>
+        <a href="login.html">Login</a>
+        <a href="signup.html">Sign up</a>
+        <a href="profile.html">Profile</a>
+        <a href="account.html" aria-current="page">Account</a>
+      </nav>
+    </header>
+
+    <main class="account-main">
+      <a class="account-back" href="profile.html">&larr; Back to profile</a>
+      <section class="account-heading" aria-labelledby="account-page-title">
+        <p class="account-eyebrow">ACCOUNT SETTINGS</p>
+        <h1 id="account-page-title">Manage your account</h1>
+        <p>Update your details or change your password.</p>
+      </section>
+
+      <p class="account-loading" id="account-loading" role="status" aria-live="polite">Loading your account...</p>
+
+      <div class="account-panels" id="account-panels" hidden>
+        <section class="account-panel" aria-labelledby="courses-title">
+          <div class="account-panel-heading">
+            <h2 id="courses-title">Your courses</h2>
+            <p>Courses you enroll in are saved to your account.</p>
+          </div>
+          <p class="account-course-status" id="account-course-status" role="status" aria-live="polite">Loading your courses...</p>
+          <ul class="account-course-list" id="account-course-list"></ul>
+          <a class="account-course-link" href="education.html#courses">Explore all courses <span aria-hidden="true">&rarr;</span></a>
+        </section>
+
+        <section class="account-panel" aria-labelledby="details-title">
+          <div class="account-panel-heading">
+            <h2 id="details-title">Personal details</h2>
+            <p>Keep your name and sign-in email or phone number up to date.</p>
+          </div>
+          <form data-account-form="account">
+            <div class="account-fields">
+              <label class="account-field">
+                <span>First name</span>
+                <input name="firstName" type="text" autocomplete="given-name" maxlength="80" required />
+              </label>
+              <label class="account-field">
+                <span>Last name</span>
+                <input name="lastName" type="text" autocomplete="family-name" maxlength="80" required />
+              </label>
+              <label class="account-field account-field-wide">
+                <span>Email or phone number</span>
+                <input name="identifier" type="text" autocomplete="username" placeholder="Email or Angola phone (+244)" required />
+              </label>
+              <label class="account-field account-field-wide">
+                <span>Current password to confirm</span>
+                <input name="currentPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required />
+              </label>
+            </div>
+            <div class="account-form-actions">
+              <p class="account-message" role="status" aria-live="polite"></p>
+              <button class="account-submit" type="submit">Save details</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="account-panel" aria-labelledby="password-title">
+          <div class="account-panel-heading">
+            <h2 id="password-title">Change password</h2>
+            <p>Use at least 8 characters. Changing your password signs out other sessions.</p>
+          </div>
+          <form data-account-form="password">
+            <div class="account-fields">
+              <label class="account-field account-field-wide">
+                <span>Current password</span>
+                <input name="currentPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required />
+              </label>
+              <label class="account-field">
+                <span>New password</span>
+                <input name="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+              </label>
+              <label class="account-field">
+                <span>Confirm new password</span>
+                <input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+              </label>
+            </div>
+            <div class="account-form-actions">
+              <p class="account-message" role="status" aria-live="polite"></p>
+              <button class="account-submit" type="submit">Update password</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer account-footer">
+      <p>&copy; 2026 Dreamer's On. All rights reserved.</p>
+      <a href="contact.html">Get in touch</a>
+    </footer>
+  </body>
+</html>
