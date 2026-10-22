@@ -1,17 +1,18 @@
 {
-  "name": "dreamers-on-auth",
+  "name": "dreamers-on",
   "version": "1.0.0",
   "private": true,
-  "description": "Dreamers On website with SQLite-backed authentication",
+  "description": "Dreamers On Cloudflare Worker with D1 and R2",
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "wrangler pages dev .",
-    "test": "node --test",
-    "deploy": "wrangler pages deploy ."
+    "dev": "wrangler dev --assets . --port 8787",
+    "deploy": "wrangler deploy",
+    "types": "tsc --noEmit"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.0.0",
+    "typescript": "^5.8.0"
   }
 }
