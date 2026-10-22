@@ -6,16 +6,20 @@ const accountCourseStatus = document.querySelector('#account-course-status');
 const accountPaymentStatus = document.querySelector('#account-payment-status');
 
 function renderEnrolledCourses(courses, paymentRequests = []) {
+  const fragment = document.createDocumentFragment();
+
   accountCourseList.replaceChildren();
   accountCourseStatus.textContent = courses.length === 0
     ? 'You have not enrolled in any courses yet.'
     : `${courses.length} course${courses.length === 1 ? '' : 's'} in your account.`;
+
   const pending = paymentRequests.filter((request) => request.status === 'pending');
   const rejected = paymentRequests.filter((request) => request.status === 'rejected');
   accountPaymentStatus.textContent = [
     ...pending.map((request) => `Payment for ${request.courseTitle} is awaiting review.`),
     ...rejected.map((request) => `Payment for ${request.courseTitle} was not approved; contact support before trying again.`),
   ].join(' ');
+
   courses.forEach((course) => {
     const item = document.createElement('li');
     item.className = 'account-course-item';
@@ -54,8 +58,10 @@ function renderEnrolledCourses(courses, paymentRequests = []) {
     });
 
     item.append(details, removeButton);
-    accountCourseList.append(item);
+    fragment.append(item);
   });
+
+  accountCourseList.append(fragment);
 }
 
 async function loadEnrolledCourses() {
