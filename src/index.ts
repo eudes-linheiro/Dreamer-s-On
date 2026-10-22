@@ -116,11 +116,12 @@ function normalizeEmail(value: unknown) {
     !localPart.includes('..') &&
     /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(localPart);
 
+  const lastLabel = labels[labels.length - 1] || '';
   const validDomain =
     domain.length <= 253 &&
     labels.length >= 2 &&
     labels.every((label) => label.length > 0 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)) &&
-    labels.at(-1)!.length >= 2;
+    lastLabel.length >= 2;
 
   if (!validLocalPart || !validDomain || email.length > 254) {
     throw httpError(400, 'Enter a valid email address.');
@@ -138,18 +139,18 @@ function normalizeIdentifier(value: unknown) {
 
   if (identifier.includes('@')) return normalizeEmail(identifier);
 
-  if (!/^\\+?[\\d\\s().-]+$/.test(identifier)) {
+  if (!/^\+?[\d\s().-]+$/.test(identifier)) {
     throw httpError(400, 'Enter an Angola phone number with 9 digits and country code +244.');
   }
 
-  const compact = identifier.replace(/[\\s().-]/g, '');
+  const compact = identifier.replace(/[\s().-]/g, '');
   let nationalNumber = compact;
 
   if (compact.startsWith('+244')) nationalNumber = compact.slice(4);
   else if (compact.startsWith('00244')) nationalNumber = compact.slice(5);
   else if (compact.startsWith('244') && compact.length === 12) nationalNumber = compact.slice(3);
 
-  if (!/^[2-9]\\d{8}$/.test(nationalNumber)) {
+  if (!/^[2-9]\d{8}$/.test(nationalNumber)) {
     throw httpError(400, 'Enter an Angola phone number with 9 digits and country code +244.');
   }
 
@@ -172,11 +173,11 @@ function validatePassword(password: unknown) {
 function toBase64Url(bytes: Uint8Array) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function fromBase64Url(value: string) {
-  const base64 = value.replaceAll('-', '+').replaceAll('_', '/');
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
@@ -253,7 +254,7 @@ async function createSession(env: Env, userId: number) {
 
 async function findUser(request: Request, env: Env) {
   const token = getCookie(request, SESSION_COOKIE);
-  if (!token || !/^[\\w-]{40,50}$/.test(token)) return null;
+  if (!token || !/^[\w-]{40,50}$/.test(token)) return null;
 
   const tokenHash = await sha256(token);
   const now = Math.floor(Date.now() / 1000);
@@ -718,7 +719,7 @@ async function handleApi(request: Request, env: Env, url: URL) {
 
   if (isLogout) {
     const token = getCookie(request, SESSION_COOKIE);
-    if (token && /^[\\w-]{40,50}$/.test(token)) {
+    if (token && /^[\w-]{40,50}$/.test(token)) {
       await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256(token)).run();
     }
     return jsonResponse(200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
@@ -802,7 +803,7 @@ async function handleApi(request: Request, env: Env, url: URL) {
       throw httpError(503, 'Password recovery is not configured. Please contact support.');
     }
 
-    if (typeof input.code !== 'string' || !/^\\d{6}$/.test(input.code)) {
+    if (typeof input.code !== 'string' || !/^\d{6}$/.test(input.code)) {
       throw httpError(400, 'Enter the 6-digit verification code.');
     }
 
