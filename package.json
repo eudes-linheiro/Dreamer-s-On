@@ -7,7 +7,8 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "wrangler dev --assets . --port 8787",
+    "start": "node server.js",
+    "dev": "node server.js",
     "deploy": "wrangler deploy",
     "types": "tsc --noEmit"
   },
